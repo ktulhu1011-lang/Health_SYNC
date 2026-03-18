@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from config import settings
 from bot.handlers.log_handler import (
@@ -12,17 +12,21 @@ from bot.handlers.settings_handler import (
     cmd_settings, settings_callback, handle_garmin_email, handle_garmin_password
 )
 
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("📝 Лог"), KeyboardButton("📊 Сегодня")],
+        [KeyboardButton("📈 Статистика"), KeyboardButton("🤖 Инсайт")],
+        [KeyboardButton("📋 История"), KeyboardButton("⚙️ Настройки")],
+    ],
+    resize_keyboard=True,
+    persistent=True,
+)
 
 async def cmd_start(update: Update, context):
     await update.message.reply_text(
         "👋 Добро пожаловать в HealthSync!\n\n"
-        "Доступные команды:\n"
-        "/log — ввести данные о привычках\n"
-        "/today — сводка за сегодня + Garmin\n"
-        "/stats — статистика за 7 дней\n"
-        "/insight — AI-инсайт прямо сейчас\n"
-        "/history — последние 7 записей\n"
-        "/settings — настройки (добавки, напоминания, Garmin)\n"
+        "Используй кнопки меню внизу 👇",
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
@@ -51,11 +55,35 @@ def main():
         _handle_text
     ))
 
+    async def post_init(app):
+        await app.bot.set_my_commands([
+            BotCommand("log", "📝 Ввести данные о привычках"),
+            BotCommand("today", "📊 Сводка за сегодня + Garmin"),
+            BotCommand("stats", "📈 Статистика за 7 дней"),
+            BotCommand("insight", "🤖 AI-инсайт прямо сейчас"),
+            BotCommand("history", "📋 Последние 7 записей"),
+            BotCommand("settings", "⚙️ Настройки"),
+        ])
+
+    app.post_init = post_init
     print("[bot] Starting HealthSync bot...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
+BUTTON_MAP = {
+    "📝 Лог": cmd_log,
+    "📊 Сегодня": cmd_today,
+    "📈 Статистика": cmd_stats,
+    "🤖 Инсайт": cmd_insight,
+    "📋 История": cmd_history,
+    "⚙️ Настройки": cmd_settings,
+}
+
 async def _handle_text(update: Update, context):
+    text = update.message.text
+    if text in BUTTON_MAP:
+        await BUTTON_MAP[text](update, context)
+        return
     if context.user_data.get("waiting_garmin_email"):
         await handle_garmin_email(update, context)
     elif context.user_data.get("waiting_garmin_password"):

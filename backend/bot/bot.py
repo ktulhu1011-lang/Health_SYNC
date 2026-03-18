@@ -19,7 +19,6 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         [KeyboardButton("📋 История"), KeyboardButton("⚙️ Настройки")],
     ],
     resize_keyboard=True,
-    persistent=True,
 )
 
 async def cmd_start(update: Update, context):

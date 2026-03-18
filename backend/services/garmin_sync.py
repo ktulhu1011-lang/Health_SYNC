@@ -35,6 +35,25 @@ def decrypt_value(ciphertext: str) -> str:
     return aesgcm.decrypt(nonce, ct, None).decode()
 
 
+# Cache: {user_id: (client, login_timestamp)}
+_garmin_client_cache: dict = {}
+_SESSION_TTL = 3600  # reuse session for 1 hour
+
+
+def _get_garmin_client(user_id: int, email: str, password: str):
+    """Return cached Garmin client or create a new one."""
+    from garminconnect import Garmin
+    cached = _garmin_client_cache.get(user_id)
+    if cached:
+        client, ts = cached
+        if time.time() - ts < _SESSION_TTL:
+            return client
+    client = Garmin(email, password)
+    client.login()
+    _garmin_client_cache[user_id] = (client, time.time())
+    return client
+
+
 def sync_user(user_id: int, db: Session, days_back: int = 1) -> int:
     """Sync Garmin data for a user. Returns number of metrics fetched."""
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -45,10 +64,10 @@ def sync_user(user_id: int, db: Session, days_back: int = 1) -> int:
     password = decrypt_value(user.garmin_token_enc)
 
     try:
-        from garminconnect import Garmin
-        client = Garmin(email, password)
-        client.login()
+        client = _get_garmin_client(user_id, email, password)
     except Exception as e:
+        # Clear cache on auth error so next call tries fresh login
+        _garmin_client_cache.pop(user_id, None)
         _log_sync(db, user_id, "error", str(e))
         raise
 

@@ -25,7 +25,7 @@ app = FastAPI(title="HealthSync API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:5173"],
+    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:5173", "https://app.healthsync.online"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -37,20 +37,80 @@ def decrypt_value(ciphertext: str) -> str:
 
 # Cache: {user_id: (client, login_timestamp)}
 _garmin_client_cache: dict = {}
-_SESSION_TTL = 3600  # reuse session for 1 hour
+_SESSION_TTL = 3600 * 6  # reuse session for 6 hours
 
 
-def _get_garmin_client(user_id: int, email: str, password: str):
+def _save_tokens(user_id: int, client, db: "Session"):
+    """Persist garth tokens to user settings_json so they survive restarts."""
+    try:
+        import tempfile, shutil, json, os as _os
+        tmp = tempfile.mkdtemp()
+        client.garth.dump(tmp)
+        token_data = {}
+        for fname in _os.listdir(tmp):
+            with open(_os.path.join(tmp, fname)) as fh:
+                token_data[fname] = fh.read()
+        shutil.rmtree(tmp, ignore_errors=True)
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user:
+            s = dict(user.settings_json or {})
+            s["garmin_tokens"] = token_data
+            s["garmin_token_ts"] = time.time()
+            user.settings_json = s
+            db.commit()
+    except Exception as e:
+        print(f"[garmin] token save failed: {e}")
+
+
+def _load_tokens(user_id: int, db: "Session"):
+    """Load persisted garth tokens from DB. Returns temp dir path or None."""
+    try:
+        import tempfile, os as _os
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if not user or not (user.settings_json or {}).get("garmin_tokens"):
+            return None
+        token_ts = (user.settings_json or {}).get("garmin_token_ts", 0)
+        if time.time() - token_ts > 3600 * 23:  # tokens older than 23h — force fresh login
+            return None
+        tmp = tempfile.mkdtemp()
+        for fname, content in user.settings_json["garmin_tokens"].items():
+            with open(_os.path.join(tmp, fname), "w") as fh:
+                fh.write(content)
+        return tmp
+    except Exception as e:
+        print(f"[garmin] token load failed: {e}")
+        return None
+
+
+def _get_garmin_client(user_id: int, email: str, password: str, db=None):
     """Return cached Garmin client or create a new one."""
+    import shutil
     from garminconnect import Garmin
     cached = _garmin_client_cache.get(user_id)
     if cached:
         client, ts = cached
         if time.time() - ts < _SESSION_TTL:
             return client
+
+    # Try loading persisted tokens from DB to avoid re-login
+    token_dir = _load_tokens(user_id, db) if db else None
+    if token_dir:
+        try:
+            client = Garmin(email, password, session_timeout=10)
+            client.garth.load(token_dir)
+            shutil.rmtree(token_dir, ignore_errors=True)
+            _garmin_client_cache[user_id] = (client, time.time())
+            print(f"[garmin] Restored session from DB for user {user_id}")
+            return client
+        except Exception as e:
+            print(f"[garmin] Token restore failed, doing fresh login: {e}")
+            shutil.rmtree(token_dir, ignore_errors=True)
+
     client = Garmin(email, password)
     client.login()
     _garmin_client_cache[user_id] = (client, time.time())
+    if db:
+        _save_tokens(user_id, client, db)
     return client
 
 
@@ -64,7 +124,7 @@ def sync_user(user_id: int, db: Session, days_back: int = 1) -> int:
     password = decrypt_value(user.garmin_token_enc)
 
     try:
-        client = _get_garmin_client(user_id, email, password)
+        client = _get_garmin_client(user_id, email, password, db=db)
     except Exception as e:
         # Clear cache on auth error so next call tries fresh login
         _garmin_client_cache.pop(user_id, None)

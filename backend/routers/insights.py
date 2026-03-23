@@ -20,12 +20,13 @@ def get_insights(
 
 @router.post("/generate", response_model=schemas.InsightOut)
 def generate_insight(
+    days: int = Query(30, ge=7, le=180, description="Period in days (7–180)"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth_utils.get_current_user)
 ):
     from services.ai_insights import generate_insight_for_user
     try:
-        insight = generate_insight_for_user(current_user.id, db, trigger_type="on_demand")
+        insight = generate_insight_for_user(current_user.id, db, trigger_type="on_demand", days=days)
         return insight
     except Exception as e:
         import traceback

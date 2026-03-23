@@ -6,10 +6,9 @@ import models
 from config import settings
 
 
-INSIGHT_PROMPT = """Ты — персональный AI-аналитик здоровья. Анализируй данные и давай конкретные,
-числовые инсайты на русском языке. Будь кратким и конкретным, используй числа.
+INSIGHT_PROMPT = """Ты — персональный AI-аналитик здоровья и биохакинга. Твоя задача — дать глубокий, детальный анализ данных пользователя и выдать максимально полезные, персонализированные инсайты на русском языке.
 
-Данные пользователя за последние {days} дней:
+Данные пользователя за последние {days} дней ({date_from} — {date_to}):
 
 ПРИВЫЧКИ (по дням):
 {habits_json}
@@ -20,17 +19,27 @@ INSIGHT_PROMPT = """Ты — персональный AI-аналитик здо
 АГРЕГАТЫ (среднее "с привычкой" vs "без привычки"):
 {aggregates_json}
 
-Найди 2-3 наиболее значимые корреляции между привычками и биометрикой. Также проанализируй влияние тренировок на сон и HRV. Для каждого инсайта укажи:
-- Конкретную привычку или тип тренировки и метрику
-- Числовые значения ("с" vs "без")
-- Количество наблюдений
-- Практическую рекомендацию
+Проведи полный анализ по следующим блокам:
 
-Формат ответа: чёткие абзацы без markdown-заголовков. Начни с самой сильной корреляции."""
+1. КОРРЕЛЯЦИИ ПРИВЫЧЕК И БИОМЕТРИКИ
+Найди все значимые корреляции между привычками и биометрикой. Для каждой укажи конкретные числа ("с" vs "без"), количество наблюдений, и оцени статистическую надёжность. Начни с самых сильных эффектов.
+
+2. АНАЛИЗ ТРЕНИРОВОК
+Как разные типы тренировок влияют на сон, HRV, пульс покоя и Body Battery на следующий день? Есть ли оптимальное время или интенсивность?
+
+3. ПАТТЕРНЫ СНА
+Что коррелирует с лучшим sleep score и глубоким сном? Анализируй поведение вечером (экран, еда, стресс, алкоголь).
+
+4. ВОССТАНОВЛЕНИЕ И СТРЕСС
+Динамика HRV, Body Battery и пульса покоя. Какие привычки помогают восстановлению? Есть ли признаки перетренированности или хронического стресса?
+
+5. ТОП-3 РЕКОМЕНДАЦИИ
+Конкретные, измеримые изменения с наибольшим ожидаемым эффектом на основе данных. Укажи какую метрику и на сколько ожидаешь улучшить.
+
+Используй числа везде где это возможно. Пиши развёрнуто и детально — это персональный отчёт здоровья, а не краткая сводка. Формат: чёткие блоки с заголовками каждого раздела."""
 
 
-def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on_demand") -> models.AIInsight:
-    days = 30
+def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on_demand", days: int = 30) -> models.AIInsight:
     since = date.today() - timedelta(days=days)
 
     # Fetch habits
@@ -103,17 +112,21 @@ def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on
     aggregates = _compute_aggregates(habits_by_date, metrics_by_date)
 
     import json
+    date_from = since.strftime("%d.%m.%Y")
+    date_to = date.today().strftime("%d.%m.%Y")
     prompt = INSIGHT_PROMPT.format(
         days=days,
-        habits_json=json.dumps(habits_by_date, ensure_ascii=False, default=str)[:3000],
-        metrics_json=json.dumps(metrics_by_date, ensure_ascii=False, default=str)[:3500],
-        aggregates_json=json.dumps(aggregates, ensure_ascii=False, default=str)[:2000],
+        date_from=date_from,
+        date_to=date_to,
+        habits_json=json.dumps(habits_by_date, ensure_ascii=False, default=str)[:6000],
+        metrics_json=json.dumps(metrics_by_date, ensure_ascii=False, default=str)[:7000],
+        aggregates_json=json.dumps(aggregates, ensure_ascii=False, default=str)[:4000],
     )
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
+        model="claude-opus-4-5",
+        max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
     insight_text = message.content[0].text
@@ -122,7 +135,7 @@ def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on
         user_id=user_id,
         insight_text=insight_text,
         trigger_type=trigger_type,
-        metrics_snapshot_json={"aggregates": aggregates, "garmin_days": len(garmin)},
+        metrics_snapshot_json={"aggregates": aggregates, "garmin_days": len(garmin), "days_period": days},
     )
     db.add(insight)
     db.commit()

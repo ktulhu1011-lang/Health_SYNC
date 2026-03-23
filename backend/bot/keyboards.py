@@ -279,3 +279,13 @@ def stress_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("😰 Очень высокий", callback_data="habit:subjective_stress:4")],
         [InlineKeyboardButton("◀️ Назад", callback_data="cat:wellbeing")],
     ])
+
+
+def insight_period_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📅 7 дней", callback_data="insight:days:7")],
+        [InlineKeyboardButton("📅 14 дней", callback_data="insight:days:14")],
+        [InlineKeyboardButton("📅 30 дней", callback_data="insight:days:30")],
+        [InlineKeyboardButton("📅 60 дней", callback_data="insight:days:60")],
+        [InlineKeyboardButton("📅 90 дней", callback_data="insight:days:90")],
+    ])

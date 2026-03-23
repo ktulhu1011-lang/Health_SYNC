@@ -18,6 +18,7 @@ from bot.keyboards import (
     coffee_time_keyboard, supplement_list_keyboard,
     nutr_pre_sleep_eating_keyboard,
     meditation_keyboard, walk_keyboard, feeling_keyboard, stress_keyboard,
+    insight_period_keyboard,
     SUPPLEMENT_GROUPS,
 )
 
@@ -181,20 +182,15 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_insight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user, db = _get_user(update.effective_user.id)
+    if db:
+        db.close()
     if not user:
         await update.message.reply_text("❌ Не зарегистрирован.")
-        if db:
-            db.close()
         return
-    try:
-        await update.message.reply_text("🤖 Генерирую AI-инсайт, подожди...")
-        from services.ai_insights import generate_insight_for_user
-        insight = generate_insight_for_user(user.id, db, trigger_type="on_demand")
-        await update.message.reply_text(f"📊 AI-инсайт:\n\n{insight.insight_text}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка генерации инсайта: {e}")
-    finally:
-        db.close()
+    await update.message.reply_text(
+        "📊 За какой период сделать AI-анализ?",
+        reply_markup=insight_period_keyboard()
+    )
 
 
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -245,6 +241,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _route_callback(query, data: str, user, db, context):
+    # AI Insight period selection
+    if data.startswith("insight:days:"):
+        days = int(data.split(":")[-1])
+        await query.edit_message_text(f"🤖 Генерирую AI-анализ за {days} дней, подожди 20–30 секунд...")
+        try:
+            from services.ai_insights import generate_insight_for_user
+            insight = generate_insight_for_user(user.id, db, trigger_type="on_demand", days=days)
+            text = insight.insight_text
+            # Telegram message limit is 4096 chars — split if needed
+            if len(text) <= 4096:
+                await query.message.reply_text(f"📊 AI-анализ за {days} дней:\n\n{text}")
+            else:
+                await query.message.reply_text(f"📊 AI-анализ за {days} дней:\n\n{text[:4000]}...")
+                await query.message.reply_text(f"...продолжение:\n\n{text[4000:]}")
+        except Exception as e:
+            await query.message.reply_text(f"❌ Ошибка генерации: {e}")
+        return
+
     # Date selection
     if data.startswith("date:"):
         from datetime import timedelta

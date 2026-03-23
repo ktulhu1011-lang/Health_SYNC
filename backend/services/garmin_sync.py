@@ -96,16 +96,21 @@ def _get_garmin_client(user_id: int, email: str, password: str, db=None):
     token_dir = _load_tokens(user_id, db) if db else None
     if token_dir:
         try:
-            client = Garmin(email, password, session_timeout=10)
+            client = Garmin(email, password)
             client.garth.load(token_dir)
             shutil.rmtree(token_dir, ignore_errors=True)
+            # Verify tokens work with lightweight call
+            client.get_full_name()
             _garmin_client_cache[user_id] = (client, time.time())
-            print(f"[garmin] Restored session from DB for user {user_id}")
+            print(f"[garmin] Restored session from DB tokens for user {user_id}")
             return client
         except Exception as e:
-            print(f"[garmin] Token restore failed, doing fresh login: {e}")
+            print(f"[garmin] Token restore failed ({e}), will NOT do fresh login to avoid rate limit")
             shutil.rmtree(token_dir, ignore_errors=True)
+            raise RuntimeError(f"Garmin token restore failed: {e}. Please re-save credentials in Settings.")
 
+    # No tokens in DB — must do fresh login
+    print(f"[garmin] No tokens in DB for user {user_id}, doing fresh login")
     client = Garmin(email, password)
     client.login()
     _garmin_client_cache[user_id] = (client, time.time())

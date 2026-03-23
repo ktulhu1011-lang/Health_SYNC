@@ -50,12 +50,13 @@ def save_garmin_credentials(
 
 @router.post("/garmin/sync")
 def manual_sync(
+    days_back: int = Query(1, ge=1, le=90),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth_utils.get_current_user)
 ):
     from services.garmin_sync import sync_user
     try:
-        count = sync_user(current_user.id, db)
+        count = sync_user(current_user.id, db, days_back=days_back)
         return {"status": "ok", "metrics_fetched": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

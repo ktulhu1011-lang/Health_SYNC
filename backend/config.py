@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "change_me_in_production"
     jwt_expire_minutes: int = 10080  # 7 days
     frontend_url: str = "http://localhost:3000"
-    garmin_sync_hour: int = 3
+    garmin_sync_hour: int = 10
     weekly_insight_day: str = "sunday"
     optional_morning_reminder: str = "08:00"
     user1_username: str = "user1"

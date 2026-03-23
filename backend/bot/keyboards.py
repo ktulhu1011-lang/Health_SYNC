@@ -1,11 +1,21 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
+def date_select_keyboard() -> InlineKeyboardMarkup:
+    from datetime import date, timedelta
+    today = date.today()
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"📅 Сегодня ({today.strftime('%d.%m')})", callback_data="date:0")],
+        [InlineKeyboardButton(f"📅 Вчера ({(today - timedelta(1)).strftime('%d.%m')})", callback_data="date:1")],
+        [InlineKeyboardButton(f"📅 {(today - timedelta(2)).strftime('%d.%m')}", callback_data="date:2")],
+        [InlineKeyboardButton(f"📅 {(today - timedelta(3)).strftime('%d.%m')}", callback_data="date:3")],
+    ])
+
+
 def main_log_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🚬 Вредные привычки", callback_data="cat:bad_habits")],
         [InlineKeyboardButton("💊 Добавки", callback_data="cat:supplements")],
-        [InlineKeyboardButton("🥗 Питание", callback_data="cat:nutrition")],
         [InlineKeyboardButton("💧 Вода", callback_data="cat:water")],
         [InlineKeyboardButton("🧘 Активности / самочувствие", callback_data="cat:wellbeing")],
         [InlineKeyboardButton("✅ Готово", callback_data="log:done")],
@@ -224,6 +234,7 @@ def wellbeing_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🚶 Прогулка", callback_data="wb:walk")],
         [InlineKeyboardButton("😊 Самочувствие", callback_data="wb:feeling")],
         [InlineKeyboardButton("😤 Уровень стресса", callback_data="wb:stress")],
+        [InlineKeyboardButton("🕐 Еда за 2ч до сна", callback_data="wb:pre_sleep_eating")],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data="log:menu")],
     ])
 

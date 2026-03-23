@@ -12,12 +12,11 @@ from database import SessionLocal
 import models
 from bot.keyboards import (
     main_log_menu, bad_habits_menu, supplements_group_menu,
-    nutrition_menu, water_keyboard, wellbeing_menu,
+    water_keyboard, wellbeing_menu, date_select_keyboard,
     smoking_keyboard, alcohol_keyboard, sweets_keyboard,
     fastfood_keyboard, screen_keyboard, coffee_count_keyboard,
     coffee_time_keyboard, supplement_list_keyboard,
-    nutr_sweets_keyboard, nutr_fastfood_keyboard,
-    nutr_late_eating_keyboard, nutr_pre_sleep_eating_keyboard, nutr_quality_keyboard,
+    nutr_pre_sleep_eating_keyboard,
     meditation_keyboard, walk_keyboard, feeling_keyboard, stress_keyboard,
     SUPPLEMENT_GROUPS,
 )
@@ -32,7 +31,7 @@ def _get_user(telegram_id: int):
         return None, None
 
 
-def _save_habit(user_id: int, category: str, habit_key: str, value, db=None):
+def _save_habit(user_id: int, category: str, habit_key: str, value, db=None, log_date=None):
     close = False
     if db is None:
         db = SessionLocal()
@@ -40,7 +39,7 @@ def _save_habit(user_id: int, category: str, habit_key: str, value, db=None):
     try:
         log = models.HabitLog(
             user_id=user_id,
-            date=date.today(),
+            date=log_date or date.today(),
             category=category,
             habit_key=habit_key,
             value=value,
@@ -52,6 +51,12 @@ def _save_habit(user_id: int, category: str, habit_key: str, value, db=None):
             db.close()
 
 
+def _get_log_date(context) -> date:
+    from datetime import timedelta
+    days_back = context.user_data.get("log_days_back", 0)
+    return date.today() - timedelta(days=days_back)
+
+
 async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user, db = _get_user(update.effective_user.id)
     if db:
@@ -61,9 +66,10 @@ async def cmd_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Ты не зарегистрирован в системе. Обратись к администратору."
         )
         return
+    context.user_data["log_days_back"] = 0
     await update.message.reply_text(
-        "📋 Выбери категорию для записи:",
-        reply_markup=main_log_menu()
+        "📅 За какой день вносишь данные?",
+        reply_markup=date_select_keyboard()
     )
 
 
@@ -232,9 +238,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _route_callback(query, data: str, user, db, context):
+    # Date selection
+    if data.startswith("date:"):
+        from datetime import timedelta
+        days_back = int(data.split(":")[1])
+        context.user_data["log_days_back"] = days_back
+        log_date = date.today() - timedelta(days=days_back)
+        date_str = log_date.strftime("%d.%m.%Y")
+        await query.edit_message_text(
+            f"📋 Записываем за {date_str}. Выбери категорию:",
+            reply_markup=main_log_menu()
+        )
+        return
+
     # Main menu navigation
     if data == "log:menu":
-        await query.edit_message_text("📋 Выбери категорию:", reply_markup=main_log_menu())
+        log_date = _get_log_date(context)
+        await query.edit_message_text(
+            f"📋 Записываем за {log_date.strftime('%d.%m.%Y')}. Выбери категорию:",
+            reply_markup=main_log_menu()
+        )
         return
 
     if data == "log:done":
@@ -249,10 +272,6 @@ async def _route_callback(query, data: str, user, db, context):
     if data == "cat:supplements":
         active = set((user.settings_json or {}).get("active_supplements", []))
         await query.edit_message_text("💊 Добавки NOW — выбери группу:", reply_markup=supplements_group_menu())
-        return
-
-    if data == "cat:nutrition":
-        await query.edit_message_text("🥗 Питание:", reply_markup=nutrition_menu())
         return
 
     if data == "cat:water":
@@ -296,7 +315,7 @@ async def _route_callback(query, data: str, user, db, context):
     if data.startswith("habit:coffee:") and len(data.split(":")) == 4:
         parts = data.split(":")
         count, time_val = parts[2], parts[3]
-        _save_habit(user.id, "bad_habits", "coffee", {"count": count, "last_time": time_val}, db)
+        _save_habit(user.id, "bad_habits", "coffee", {"count": count, "last_time": time_val}, db, _get_log_date(context))
         await query.edit_message_text(
             f"☕ Записано: {count} чашки, последний — {time_val}",
             reply_markup=bad_habits_menu()
@@ -307,7 +326,7 @@ async def _route_callback(query, data: str, user, db, context):
     if data.startswith("supp:group:"):
         group = data.split(":")[-1]
         active = set((user.settings_json or {}).get("active_supplements", []))
-        taken = _get_today_taken_supplements(user.id, db, group)
+        taken = _get_today_taken_supplements(user.id, db, group, _get_log_date(context))
         group_name = {"antistress": "Антистресс 🧘", "antioxidants": "Антиоксиданты 🛡", "basic": "Базовые ⚡"}.get(group, group)
         await query.edit_message_text(
             f"💊 {group_name} — отметь принятые:",
@@ -317,54 +336,42 @@ async def _route_callback(query, data: str, user, db, context):
 
     if data.startswith("supp:toggle:"):
         _, _, group, key = data.split(":")
-        taken = _get_today_taken_supplements(user.id, db, group)
+        taken = _get_today_taken_supplements(user.id, db, group, _get_log_date(context))
         if key in taken:
             # Remove
-            _remove_habit(user.id, "supplements", f"supp_{key}", db)
+            _remove_habit(user.id, "supplements", f"supp_{key}", db, _get_log_date(context))
             taken.discard(key)
         else:
-            _save_habit(user.id, "supplements", f"supp_{key}", True, db)
+            _save_habit(user.id, "supplements", f"supp_{key}", True, db, _get_log_date(context))
             taken.add(key)
         active = set((user.settings_json or {}).get("active_supplements", []))
         await query.edit_message_reply_markup(reply_markup=supplement_list_keyboard(group, taken, active))
         return
 
     # Nutrition sub-menu
-    if data == "nutr:sweets":
-        await query.edit_message_text("🍭 Сладкое в питании:", reply_markup=nutr_sweets_keyboard())
-        return
-    if data == "nutr:fastfood":
-        await query.edit_message_text("🍔 Фастфуд:", reply_markup=nutr_fastfood_keyboard())
-        return
-    if data == "nutr:late_eating":
-        await query.edit_message_text("🌙 Переел на ночь?", reply_markup=nutr_late_eating_keyboard())
-        return
-    if data == "nutr:pre_sleep_eating":
-        await query.edit_message_text("🕐 Ел ли ты еду за 2 часа до сна?", reply_markup=nutr_pre_sleep_eating_keyboard())
-        return
-    if data == "nutr:quality":
-        await query.edit_message_text("⭐ Качество питания сегодня?", reply_markup=nutr_quality_keyboard())
-        return
 
     # Wellbeing sub-menu
     if data == "wb:meditation":
-        await query.edit_message_text("🧘 Медитация сегодня:", reply_markup=meditation_keyboard())
+        await query.edit_message_text("🧘 Медитация:", reply_markup=meditation_keyboard())
         return
     if data == "wb:walk":
         await query.edit_message_text("🚶 Прогулка на воздухе:", reply_markup=walk_keyboard())
         return
     if data == "wb:feeling":
-        await query.edit_message_text("😊 Самочувствие сейчас (1–5):", reply_markup=feeling_keyboard())
+        await query.edit_message_text("😊 Самочувствие (1–5):", reply_markup=feeling_keyboard())
         return
     if data == "wb:stress":
-        await query.edit_message_text("😤 Уровень стресса сегодня:", reply_markup=stress_keyboard())
+        await query.edit_message_text("😤 Уровень стресса:", reply_markup=stress_keyboard())
+        return
+    if data == "wb:pre_sleep_eating":
+        await query.edit_message_text("🕐 Ел за 2ч до сна?", reply_markup=nutr_pre_sleep_eating_keyboard())
         return
 
     # Generic habit save: habit:{key}:{value}
     if data.startswith("habit:") and len(data.split(":")) == 3:
         _, key, value = data.split(":")
         category = _key_to_category(key)
-        _save_habit(user.id, category, key, value, db)
+        _save_habit(user.id, category, key, value, db, _get_log_date(context))
         label = _key_label(key)
         await query.edit_message_text(
             f"✅ {label} записано: {value}",
@@ -373,12 +380,12 @@ async def _route_callback(query, data: str, user, db, context):
         return
 
 
-def _get_today_taken_supplements(user_id: int, db, group: str) -> set:
-    today = date.today()
+def _get_today_taken_supplements(user_id: int, db, group: str, log_date=None) -> set:
+    log_date = log_date or date.today()
     keys = [key for key, _ in SUPPLEMENT_GROUPS.get(group, [])]
     logs = db.query(models.HabitLog).filter(
         models.HabitLog.user_id == user_id,
-        models.HabitLog.date == today,
+        models.HabitLog.date == log_date,
         models.HabitLog.category == "supplements",
     ).all()
     taken = set()
@@ -389,10 +396,10 @@ def _get_today_taken_supplements(user_id: int, db, group: str) -> set:
     return taken
 
 
-def _remove_habit(user_id: int, category: str, habit_key: str, db):
+def _remove_habit(user_id: int, category: str, habit_key: str, db, log_date=None):
     db.query(models.HabitLog).filter(
         models.HabitLog.user_id == user_id,
-        models.HabitLog.date == date.today(),
+        models.HabitLog.date == log_date or date.today(),
         models.HabitLog.category == category,
         models.HabitLog.habit_key == habit_key,
     ).delete()
@@ -407,11 +414,7 @@ def _key_to_category(key: str) -> str:
         "fastfood": "bad_habits",
         "screen_bedtime": "bad_habits",
         "coffee": "bad_habits",
-        "nutrition_sweets": "nutrition",
-        "nutrition_fastfood": "nutrition",
-        "late_eating": "nutrition",
-        "pre_sleep_eating": "nutrition",
-        "nutrition_quality": "nutrition",
+        "pre_sleep_eating": "wellbeing",
         "water": "water",
         "meditation": "wellbeing",
         "walk": "wellbeing",

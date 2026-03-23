@@ -146,6 +146,10 @@ def _compute_aggregates(habits_by_date: dict, metrics_by_date: dict) -> dict:
                 val = mvals.get(metric)
                 if val is None:
                     continue
+                try:
+                    val = float(val)
+                except (TypeError, ValueError):
+                    continue
                 has_habit = d in habits_by_date and habit_key in habits_by_date[d]
                 if has_habit and _is_active(habits_by_date[d][habit_key]):
                     vals_with.append(val)

@@ -175,7 +175,10 @@ def _is_active(value) -> bool:
         no_values = {"нет", "не курил", "не пил", "не ел", "0", "no", "false"}
         return value.lower().replace(" ✅", "").strip() not in no_values
     if isinstance(value, dict):
-        return value.get("count", 0) > 0
+        try:
+            return int(value.get("count", 0)) > 0
+        except (TypeError, ValueError):
+            return bool(value)
     return False
 
 

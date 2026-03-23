@@ -28,6 +28,8 @@ def generate_insight(
         insight = generate_insight_for_user(current_user.id, db, trigger_type="on_demand")
         return insight
     except Exception as e:
+        import traceback
+        print(f"[insights] ERROR: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

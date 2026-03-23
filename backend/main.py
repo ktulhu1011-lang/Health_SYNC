@@ -63,7 +63,10 @@ def _seed_users():
             },
         ]
         for u in users_data:
-            existing = db.query(models.User).filter(models.User.username == u["username"]).first()
+            existing = db.query(models.User).filter(
+                (models.User.username == u["username"]) |
+                (models.User.telegram_id == u["telegram_id"])
+            ).first()
             if not existing:
                 user = models.User(
                     username=u["username"],
@@ -73,6 +76,11 @@ def _seed_users():
                     settings_json={},
                 )
                 db.add(user)
+            else:
+                # Update credentials if username/telegram_id changed
+                existing.username = u["username"]
+                existing.telegram_id = u["telegram_id"]
+                existing.password_hash = hash_password(u["password"])
         db.commit()
     finally:
         db.close()

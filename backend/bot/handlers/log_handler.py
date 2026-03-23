@@ -87,13 +87,20 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             models.HabitLog.date == today
         ).all()
 
-        # Garmin yesterday
+        # Garmin — try today first, fall back to yesterday
         from datetime import timedelta
         yesterday = today - timedelta(days=1)
         garmin = db.query(models.GarminDaily).filter(
             models.GarminDaily.user_id == user.id,
-            models.GarminDaily.date == yesterday
+            models.GarminDaily.date == today
         ).first()
+        garmin_date = today
+        if not garmin:
+            garmin = db.query(models.GarminDaily).filter(
+                models.GarminDaily.user_id == user.id,
+                models.GarminDaily.date == yesterday
+            ).first()
+            garmin_date = yesterday
 
         lines = [f"📊 Данные за {today.strftime('%d.%m.%Y')}:"]
         if logs:
@@ -104,7 +111,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append("\n⬜ Привычки ещё не внесены. Используй /log")
 
         if garmin:
-            lines.append(f"\n📡 Данные Garmin за {yesterday.strftime('%d.%m.%Y')}:")
+            lines.append(f"\n📡 Данные Garmin за {garmin_date.strftime('%d.%m.%Y')}:")
             if garmin.sleep_score:
                 lines.append(f"  💤 Sleep score: {garmin.sleep_score}")
             if garmin.deep_sleep_sec:
@@ -116,7 +123,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if garmin.body_battery_charged:
                 lines.append(f"  🔋 Body Battery: +{garmin.body_battery_charged}")
         else:
-            lines.append(f"\n⚠️ Данные Garmin за {yesterday.strftime('%d.%m.%Y')} ещё не синхронизированы")
+            lines.append(f"\n⚠️ Данные Garmin ещё не синхронизированы")
 
         await update.message.reply_text("\n".join(lines))
     finally:

@@ -144,7 +144,7 @@ def sync_user(user_id: int, db: Session, days_back: int = 1) -> int:
 
     metrics_count = 0
     for i in range(days_back):
-        target = date.today() - timedelta(days=i + 1)
+        target = date.today() - timedelta(days=i)
         try:
             metrics_count += _sync_day(client, user_id, target, db)
         except Exception as e:

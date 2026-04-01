@@ -48,6 +48,25 @@ def save_garmin_credentials(
     return {"status": "saved"}
 
 
+@router.post("/garmin/inject-tokens")
+def inject_garmin_tokens(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_utils.get_current_user)
+):
+    """Upload garth tokens generated from a non-banned IP (e.g. local machine)."""
+    import time
+    tokens = body.get("tokens")
+    if not tokens or not isinstance(tokens, dict):
+        raise HTTPException(status_code=400, detail="tokens dict required")
+    s = dict(current_user.settings_json or {})
+    s["garmin_tokens"] = tokens
+    s["garmin_token_ts"] = time.time()
+    current_user.settings_json = s
+    db.commit()
+    return {"status": "ok", "files": list(tokens.keys())}
+
+
 @router.post("/garmin/sync")
 def manual_sync(
     days_back: int = Query(1, ge=1, le=90),

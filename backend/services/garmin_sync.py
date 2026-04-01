@@ -69,9 +69,6 @@ def _load_tokens(user_id: int, db: "Session"):
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if not user or not (user.settings_json or {}).get("garmin_tokens"):
             return None
-        token_ts = (user.settings_json or {}).get("garmin_token_ts", 0)
-        if time.time() - token_ts > 3600 * 23:  # tokens older than 23h — force fresh login
-            return None
         tmp = tempfile.mkdtemp()
         for fname, content in user.settings_json["garmin_tokens"].items():
             with open(_os.path.join(tmp, fname), "w") as fh:
@@ -108,6 +105,9 @@ def _get_garmin_client(user_id: int, email: str, password: str, db=None):
             # Verify tokens work
             client.get_full_name()
             _garmin_client_cache[user_id] = (client, time.time())
+            # Re-save tokens after restore (garth may have refreshed access token)
+            if db:
+                _save_tokens(user_id, client, db)
             print(f"[garmin] Restored session from DB tokens for user {user_id}, display_name={client.display_name}")
             return client
         except Exception as e:

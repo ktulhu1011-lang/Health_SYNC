@@ -67,6 +67,45 @@ def inject_garmin_tokens(
     return {"status": "ok", "files": list(tokens.keys())}
 
 
+@router.get("/garmin/debug")
+def debug_garmin(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_utils.get_current_user)
+):
+    """Debug: check garmin session, display_name and test a simple API call."""
+    from services.garmin_sync import decrypt_value, _load_tokens, _garmin_client_cache
+    import tempfile, os, shutil
+    from garminconnect import Garmin
+    result = {}
+    try:
+        email = decrypt_value(current_user.garmin_email_enc)
+        result["email"] = email
+        token_dir = _load_tokens(current_user.id, db)
+        result["has_tokens"] = bool(token_dir)
+        if token_dir:
+            client = Garmin(email, "")
+            client.garth.load(token_dir)
+            shutil.rmtree(token_dir, ignore_errors=True)
+            try:
+                profile = client.garth.profile
+                result["profile_keys"] = list(profile.keys()) if profile else []
+                client.display_name = profile.get("displayName") or profile.get("userName")
+                result["display_name"] = client.display_name
+            except Exception as e:
+                result["profile_error"] = str(e)
+            try:
+                from datetime import date, timedelta
+                yesterday = (date.today() - timedelta(days=1)).isoformat()
+                stats = client.get_stats(yesterday)
+                result["stats_keys"] = list(stats.keys()) if stats else []
+                result["stats_sample"] = {k: stats[k] for k in list(stats.keys())[:5]} if stats else {}
+            except Exception as e:
+                result["stats_error"] = str(e)
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
 @router.post("/garmin/sync")
 def manual_sync(
     days_back: int = Query(1, ge=1, le=90),

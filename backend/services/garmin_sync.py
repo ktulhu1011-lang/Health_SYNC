@@ -40,6 +40,31 @@ _garmin_client_cache: dict = {}
 _SESSION_TTL = 3600 * 6  # reuse session for 6 hours
 
 
+def _extract_display_name_from_jwt(client) -> str:
+    """Decode display_name from garth's oauth2 access token (JWT) without any API call."""
+    try:
+        import base64, json as _json
+        token_str = None
+        # garth stores oauth2_token with access_token field
+        if hasattr(client.garth, 'oauth2_token') and client.garth.oauth2_token:
+            t = client.garth.oauth2_token
+            token_str = t.access_token if hasattr(t, 'access_token') else str(t)
+        if not token_str:
+            return None
+        # JWT: header.payload.signature — decode payload
+        parts = token_str.split('.')
+        if len(parts) < 2:
+            return None
+        payload_b64 = parts[1]
+        # Add padding
+        payload_b64 += '=' * (4 - len(payload_b64) % 4)
+        payload = _json.loads(base64.urlsafe_b64decode(payload_b64))
+        return payload.get('sub') or payload.get('displayName') or payload.get('userName')
+    except Exception as e:
+        print(f"[garmin] JWT decode failed: {e}")
+        return None
+
+
 def _save_tokens(user_id: int, client, db: "Session"):
     """Persist garth tokens to user settings_json so they survive restarts."""
     try:
@@ -96,19 +121,26 @@ def _get_garmin_client(user_id: int, email: str, password: str, db=None):
             client = Garmin(email, password)
             client.garth.load(token_dir)
             shutil.rmtree(token_dir, ignore_errors=True)
-            # Set display_name from garth profile (needed for get_stats etc.)
-            try:
-                profile = client.garth.profile
-                client.display_name = profile.get("displayName") or profile.get("userName")
-            except Exception:
-                pass
-            # Verify tokens work
-            client.get_full_name()
+
+            # Extract display_name from JWT payload (no API call needed — avoids 429)
+            display_name = _extract_display_name_from_jwt(client)
+            if display_name:
+                client.display_name = display_name
+                print(f"[garmin] display_name from JWT: {display_name}")
+            else:
+                # Fallback: try garth.profile API (may rate-limit)
+                try:
+                    profile = client.garth.profile
+                    client.display_name = profile.get("displayName") or profile.get("userName")
+                    print(f"[garmin] display_name from profile: {client.display_name}")
+                except Exception as pe:
+                    print(f"[garmin] profile fetch failed: {pe} — sync may return empty data")
+
             _garmin_client_cache[user_id] = (client, time.time())
             # Re-save tokens after restore (garth may have refreshed access token)
             if db:
                 _save_tokens(user_id, client, db)
-            print(f"[garmin] Restored session from DB tokens for user {user_id}, display_name={client.display_name}")
+            print(f"[garmin] Restored session for user {user_id}, display_name={client.display_name}")
             return client
         except Exception as e:
             print(f"[garmin] Token restore failed ({e}), will NOT do fresh login to avoid rate limit")

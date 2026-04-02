@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from typing import List, Optional
 from datetime import date, timedelta
 from database import get_db
@@ -49,6 +49,20 @@ def habit_history(
     if category:
         q = q.filter(models.HabitLog.category == category)
     return q.order_by(models.HabitLog.date.desc(), models.HabitLog.logged_at.desc()).all()
+
+
+@router.delete("/log/{log_id}")
+def delete_habit_log(log_id: int, db: Session = Depends(get_db),
+                     current_user: models.User = Depends(auth_utils.get_current_user)):
+    log = db.query(models.HabitLog).filter(
+        models.HabitLog.id == log_id,
+        models.HabitLog.user_id == current_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Not found")
+    db.delete(log)
+    db.commit()
+    return {"status": "deleted", "id": log_id}
 
 
 @router.get("/definitions", response_model=List[schemas.HabitDefinitionOut])

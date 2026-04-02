@@ -47,7 +47,15 @@ export default function Habits() {
 
   function hasHabit(dateStr, key) {
     const dayHabits = heatmapData[dateStr] || []
-    return dayHabits.some(h => h.habit_key === key)
+    return dayHabits.some(h => {
+      if (h.habit_key !== key) return false
+      const v = h.value
+      // value=0 or value="0" means "didn't do it" (e.g. didn't smoke, 0 coffees)
+      if (v === 0 || v === '0' || v === false || v === 'false' || v === 'no') return false
+      // "ask_count" is a bot bug artifact — treat as inactive
+      if (v === 'ask_count') return false
+      return true
+    })
   }
 
   // Group history by date

@@ -30,10 +30,22 @@ def back_to_menu() -> InlineKeyboardMarkup:
 
 # --- Bad Habits ---
 
+def smoking_count_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("1", callback_data="habit:smoking:1"),
+         InlineKeyboardButton("2", callback_data="habit:smoking:2"),
+         InlineKeyboardButton("3", callback_data="habit:smoking:3")],
+        [InlineKeyboardButton("4", callback_data="habit:smoking:4"),
+         InlineKeyboardButton("5", callback_data="habit:smoking:5"),
+         InlineKeyboardButton("10+", callback_data="habit:smoking:10")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="bh:smoking")],
+    ])
+
+
 def smoking_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Не курил ✅", callback_data="habit:smoking:0")],
-        [InlineKeyboardButton("Курил", callback_data="habit:smoking:ask_count")],
+        [InlineKeyboardButton("Курил 🚬", callback_data="bh:smoking_count")],
         [InlineKeyboardButton("◀️ Назад", callback_data="cat:bad_habits")],
     ])
 

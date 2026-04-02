@@ -13,7 +13,7 @@ import models
 from bot.keyboards import (
     main_log_menu, bad_habits_menu, supplements_group_menu,
     water_keyboard, wellbeing_menu, date_select_keyboard,
-    smoking_keyboard, alcohol_keyboard, sweets_keyboard,
+    smoking_keyboard, smoking_count_keyboard, alcohol_keyboard, sweets_keyboard,
     fastfood_keyboard, screen_keyboard, coffee_count_keyboard,
     coffee_time_keyboard, supplement_list_keyboard,
     nutr_pre_sleep_eating_keyboard,
@@ -306,6 +306,9 @@ async def _route_callback(query, data: str, user, db, context):
     # Bad habits sub-menu
     if data == "bh:smoking":
         await query.edit_message_text("🚬 Курение сегодня:", reply_markup=smoking_keyboard())
+        return
+    if data == "bh:smoking_count":
+        await query.edit_message_text("🚬 Сколько сигарет?", reply_markup=smoking_count_keyboard())
         return
     if data == "bh:alcohol":
         await query.edit_message_text("🍷 Алкоголь сегодня:", reply_markup=alcohol_keyboard())

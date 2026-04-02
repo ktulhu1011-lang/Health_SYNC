@@ -67,6 +67,18 @@ def inject_garmin_tokens(
     return {"status": "ok", "files": list(tokens.keys())}
 
 
+@router.get("/garmin/export-tokens")
+def export_garmin_tokens(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_utils.get_current_user)
+):
+    """Export stored garth token files so they can be refreshed on a non-banned IP."""
+    tokens = (current_user.settings_json or {}).get("garmin_tokens")
+    if not tokens:
+        raise HTTPException(status_code=404, detail="No tokens stored")
+    return {"tokens": tokens}
+
+
 @router.get("/garmin/debug")
 def debug_garmin(
     db: Session = Depends(get_db),

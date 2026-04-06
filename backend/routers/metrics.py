@@ -193,6 +193,9 @@ def get_correlations(
                     metric_val = float(metric_val)
                 except (TypeError, ValueError):
                     continue
+                # Convert seconds-based metrics to minutes for readability
+                if metric in ("awake_sec",):
+                    metric_val = metric_val / 60
                 has_habit = d in habits_by_date and habit_key in habits_by_date[d]
                 if has_habit:
                     val = habits_by_date[d][habit_key]

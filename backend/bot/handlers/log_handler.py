@@ -249,12 +249,13 @@ async def _route_callback(query, data: str, user, db, context):
             from services.ai_insights import generate_insight_for_user
             insight = generate_insight_for_user(user.id, db, trigger_type="on_demand", days=days)
             text = insight.insight_text
-            # Telegram message limit is 4096 chars — split if needed
-            if len(text) <= 4096:
-                await query.message.reply_text(f"📊 AI-анализ за {days} дней:\n\n{text}")
-            else:
-                await query.message.reply_text(f"📊 AI-анализ за {days} дней:\n\n{text[:4000]}...")
-                await query.message.reply_text(f"...продолжение:\n\n{text[4000:]}")
+            header = f"📊 AI-анализ за {days} дней:\n\n"
+            # Split by paragraphs to avoid cutting mid-sentence
+            chunks = _split_text(header + text, limit=4000)
+            for i, chunk in enumerate(chunks):
+                if i > 0:
+                    chunk = f"📊 продолжение ({i+1}/{len(chunks)}):\n\n" + chunk
+                await query.message.reply_text(chunk)
         except Exception as e:
             await query.message.reply_text(f"❌ Ошибка генерации: {e}")
         return
@@ -402,6 +403,37 @@ async def _route_callback(query, data: str, user, db, context):
             reply_markup=_back_keyboard(category)
         )
         return
+
+
+def _split_text(text: str, limit: int = 4000) -> list:
+    """Split text into chunks by paragraph boundaries, max `limit` chars each."""
+    if len(text) <= limit:
+        return [text]
+    chunks = []
+    paragraphs = text.split("\n\n")
+    current = ""
+    for para in paragraphs:
+        if len(current) + len(para) + 2 <= limit:
+            current = (current + "\n\n" + para).lstrip("\n")
+        else:
+            if current:
+                chunks.append(current)
+            # If single paragraph is too long, split by sentence
+            if len(para) > limit:
+                sentences = para.split(". ")
+                current = ""
+                for s in sentences:
+                    if len(current) + len(s) + 2 <= limit:
+                        current = (current + ". " + s).lstrip(". ")
+                    else:
+                        if current:
+                            chunks.append(current)
+                        current = s
+            else:
+                current = para
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _get_today_taken_supplements(user_id: int, db, group: str, log_date=None) -> set:

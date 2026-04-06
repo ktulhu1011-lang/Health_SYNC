@@ -126,7 +126,7 @@ def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=4096,
+        max_tokens=16000,
         messages=[{"role": "user", "content": prompt}],
     )
     insight_text = message.content[0].text

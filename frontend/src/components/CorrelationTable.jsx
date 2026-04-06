@@ -6,6 +6,7 @@ const METRIC_LABELS = {
   resting_hr: '💗 Пульс покоя',
   avg_stress: '😤 Стресс',
   body_battery_charged: '🔋 Body Battery',
+  awake_sec: '🟠 Бодрствование',
 }
 
 const HABIT_LABELS = {
@@ -41,8 +42,8 @@ const HABIT_LABELS = {
 
 function deltaColor(delta, metric) {
   if (!delta && delta !== 0) return 'text-gray-500'
-  // For resting_hr and stress: negative delta is GOOD
-  const invertedMetrics = ['resting_hr', 'avg_stress']
+  // For resting_hr, stress and awake_sec: negative delta is GOOD
+  const invertedMetrics = ['resting_hr', 'avg_stress', 'awake_sec']
   const good = invertedMetrics.includes(metric) ? delta < 0 : delta > 0
   if (Math.abs(delta) < 1) return 'text-gray-400'
   return good ? 'text-green-400' : 'text-red-400'
@@ -73,7 +74,7 @@ export default function CorrelationTable({ data = [] }) {
     byHabit[row.habit_key][row.metric] = row
   })
 
-  const metrics = ['sleep_score', 'hrv_last_night_avg', 'resting_hr', 'avg_stress', 'body_battery_charged']
+  const metrics = ['sleep_score', 'hrv_last_night_avg', 'resting_hr', 'avg_stress', 'body_battery_charged', 'awake_sec']
 
   const sortedHabits = Object.keys(byHabit).sort((a, b) => {
     const da = byHabit[a][sortMetric]?.delta || 0

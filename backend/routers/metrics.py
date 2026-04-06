@@ -177,7 +177,7 @@ def get_correlations(
 
     metrics_fields = [
         "sleep_score", "hrv_last_night_avg", "resting_hr",
-        "avg_stress", "body_battery_charged", "steps",
+        "avg_stress", "body_battery_charged", "steps", "awake_sec",
     ]
     results = []
 

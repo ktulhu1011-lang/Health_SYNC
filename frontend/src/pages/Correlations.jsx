@@ -14,6 +14,7 @@ const METRIC_LABELS = {
   resting_hr: '💗 Пульс покоя',
   avg_stress: '😤 Стресс',
   body_battery_charged: '🔋 Body Battery',
+  awake_sec: '🟠 Бодрствование',
 }
 
 export default function Correlations() {

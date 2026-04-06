@@ -41,6 +41,8 @@ export default function Settings() {
   const [activeSupplements, setActiveSupplements] = useState(new Set())
   const [garminEmail, setGarminEmail] = useState('')
   const [garminPassword, setGarminPassword] = useState('')
+  const [bedtimeEnabled, setBedtimeEnabled] = useState(false)
+  const [sleepEnabled, setSleepEnabled] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -51,6 +53,8 @@ export default function Settings() {
   useEffect(() => {
     insights.getSettings().then(r => {
       setSettings(r.data)
+      setBedtimeEnabled(!!r.data.bedtime_reminder_enabled)
+      setSleepEnabled(!!r.data.sleep_reminder_enabled)
       const active = r.data.active_supplements
       if (active && active.length > 0) {
         setActiveSupplements(new Set(active))
@@ -81,6 +85,8 @@ export default function Settings() {
         active_supplements: [...activeSupplements],
         morning_reminder_enabled: settings.morning_reminder_enabled,
         morning_reminder_time: settings.morning_reminder_time,
+        bedtime_reminder_enabled: bedtimeEnabled,
+        sleep_reminder_enabled: sleepEnabled,
       })
       setMessage('✅ Настройки сохранены')
     } catch {
@@ -200,6 +206,46 @@ export default function Settings() {
             />
           </div>
         )}
+      </div>
+
+      {/* Evening reminders */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
+        <h2 className="font-semibold text-gray-200 mb-1">🌙 Вечерние напоминания</h2>
+        <p className="text-gray-500 text-xs mb-4">Уведомления в Telegram по московскому времени</p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-300">📖 Лечь в кроватку и читать</div>
+              <div className="text-xs text-gray-500 mt-0.5">22:30 МСК — убери экран, возьми книгу</div>
+            </div>
+            <div
+              onClick={() => setBedtimeEnabled(v => !v)}
+              className={`w-10 h-6 rounded-full transition-colors cursor-pointer flex-shrink-0 relative ${
+                bedtimeEnabled ? 'bg-blue-600' : 'bg-gray-700'
+              }`}
+            >
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
+                bedtimeEnabled ? 'left-5' : 'left-1'
+              }`} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-300">😴 Убрал вещи и лёг спать</div>
+              <div className="text-xs text-gray-500 mt-0.5">23:00 МСК — телефон убрал, свет выключил</div>
+            </div>
+            <div
+              onClick={() => setSleepEnabled(v => !v)}
+              className={`w-10 h-6 rounded-full transition-colors cursor-pointer flex-shrink-0 relative ${
+                sleepEnabled ? 'bg-blue-600' : 'bg-gray-700'
+              }`}
+            >
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
+                sleepEnabled ? 'left-5' : 'left-1'
+              }`} />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Supplements */}

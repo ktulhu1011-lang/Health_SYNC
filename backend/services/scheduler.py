@@ -39,6 +39,60 @@ def _anomaly_check_job():
         db.close()
 
 
+def _bedtime_reminder_job():
+    """22:30 MSK — напоминание лечь в кровать и почитать."""
+    import models as m
+    db = SessionLocal()
+    try:
+        users = db.query(m.User).all()
+        for user in users:
+            if not (user.settings_json or {}).get("bedtime_reminder_enabled"):
+                continue
+            if not user.telegram_id or not settings.telegram_bot_token:
+                continue
+            import httpx
+            try:
+                httpx.post(
+                    f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
+                    json={
+                        "chat_id": user.telegram_id,
+                        "text": "📖 Время ложиться в кроватку и читать! Отложи экран, возьми книгу 🛏",
+                    },
+                    timeout=10,
+                )
+            except Exception as e:
+                print(f"[scheduler] bedtime_reminder error for user {user.id}: {e}")
+    finally:
+        db.close()
+
+
+def _sleep_reminder_job():
+    """23:00 MSK — напоминание убрать вещи и спать."""
+    import models as m
+    db = SessionLocal()
+    try:
+        users = db.query(m.User).all()
+        for user in users:
+            if not (user.settings_json or {}).get("sleep_reminder_enabled"):
+                continue
+            if not user.telegram_id or not settings.telegram_bot_token:
+                continue
+            import httpx
+            try:
+                httpx.post(
+                    f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
+                    json={
+                        "chat_id": user.telegram_id,
+                        "text": "🌙 Убирай всё и засыпай! Телефон убрал, свет выключил — сладких снов 😴",
+                    },
+                    timeout=10,
+                )
+            except Exception as e:
+                print(f"[scheduler] sleep_reminder error for user {user.id}: {e}")
+    finally:
+        db.close()
+
+
 def _morning_reminder_job():
     """Optional morning sleep summary from Garmin."""
     import models as m
@@ -130,6 +184,22 @@ def create_scheduler() -> BackgroundScheduler:
         _morning_reminder_job,
         CronTrigger(hour=int(reminder_time[0]), minute=int(reminder_time[1])),
         id="morning_reminder",
+        replace_existing=True,
+    )
+
+    # 22:30 MSK = 19:30 UTC — лечь в кровать и читать
+    scheduler.add_job(
+        _bedtime_reminder_job,
+        CronTrigger(hour=19, minute=30, timezone="UTC"),
+        id="bedtime_reminder",
+        replace_existing=True,
+    )
+
+    # 23:00 MSK = 20:00 UTC — убрать вещи и спать
+    scheduler.add_job(
+        _sleep_reminder_job,
+        CronTrigger(hour=20, minute=0, timezone="UTC"),
+        id="sleep_reminder",
         replace_existing=True,
     )
 

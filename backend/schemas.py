@@ -143,6 +143,8 @@ class UserSettingsUpdate(BaseModel):
     active_supplements: Optional[List[str]] = None
     morning_reminder_enabled: Optional[bool] = None
     morning_reminder_time: Optional[str] = None
+    bedtime_reminder_enabled: Optional[bool] = None   # 22:30 — лечь в кровать и читать
+    sleep_reminder_enabled: Optional[bool] = None     # 23:00 — убрать вещи и спать
 
 # Garmin credentials
 class GarminCredentials(BaseModel):

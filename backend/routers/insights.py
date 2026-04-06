@@ -78,6 +78,10 @@ def update_settings(
         settings["morning_reminder_enabled"] = body.morning_reminder_enabled
     if body.morning_reminder_time is not None:
         settings["morning_reminder_time"] = body.morning_reminder_time
+    if body.bedtime_reminder_enabled is not None:
+        settings["bedtime_reminder_enabled"] = body.bedtime_reminder_enabled
+    if body.sleep_reminder_enabled is not None:
+        settings["sleep_reminder_enabled"] = body.sleep_reminder_enabled
     current_user.settings_json = settings
     db.commit()
     return {"status": "ok", "settings": settings}

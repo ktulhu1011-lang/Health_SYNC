@@ -182,9 +182,6 @@ def get_correlations(
     results = []
 
     for habit_key in all_habit_keys:
-        # Skip supplement keys — too granular for correlations
-        if habit_key.startswith("supp_"):
-            continue
         for metric in metrics_fields:
             vals_with = []
             vals_without = []

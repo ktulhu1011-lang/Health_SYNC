@@ -24,6 +24,19 @@ const HABIT_LABELS = {
   late_eating: '🌙 Позд. еда',
   pre_sleep_eating: '🕐 Еда за 2ч до сна',
   had_workout: '🏋️ Тренировка',
+  // Supplements
+  supp_magnesium: '💊 Магний',
+  supp_vitamin_d: '💊 Витамин D',
+  supp_vitamin_c: '💊 Витамин C',
+  supp_zinc: '💊 Цинк',
+  supp_omega3: '💊 Омега-3',
+  supp_ashwagandha: '🌿 Ашваганда',
+  supp_theanine: '🌿 Теанин',
+  supp_melatonin: '🌙 Мелатонин',
+  supp_5htp: '🌿 5-HTP',
+  supp_glycine: '💊 Глицин',
+  supp_coq10: '💊 CoQ10',
+  supp_b_complex: '💊 B-комплекс',
 }
 
 function deltaColor(delta, metric) {

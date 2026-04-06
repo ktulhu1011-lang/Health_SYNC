@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 
 const METRIC_LABELS = {
   sleep_score: '💤 Sleep score',
-  hrv_peak: '❤️ HRV',
+  hrv_last_night_avg: '❤️ HRV',
   resting_hr: '💗 Пульс покоя',
   avg_stress: '😤 Стресс',
   body_battery_charged: '🔋 Body Battery',
@@ -22,6 +22,8 @@ const HABIT_LABELS = {
   subjective_stress: '😤 Стресс субъект.',
   nutrition_quality: '🥗 Качество еды',
   late_eating: '🌙 Позд. еда',
+  pre_sleep_eating: '🕐 Еда за 2ч до сна',
+  had_workout: '🏋️ Тренировка',
 }
 
 function deltaColor(delta, metric) {
@@ -58,7 +60,7 @@ export default function CorrelationTable({ data = [] }) {
     byHabit[row.habit_key][row.metric] = row
   })
 
-  const metrics = ['sleep_score', 'hrv_peak', 'resting_hr', 'avg_stress', 'body_battery_charged']
+  const metrics = ['sleep_score', 'hrv_last_night_avg', 'resting_hr', 'avg_stress', 'body_battery_charged']
 
   const sortedHabits = Object.keys(byHabit).sort((a, b) => {
     const da = byHabit[a][sortMetric]?.delta || 0

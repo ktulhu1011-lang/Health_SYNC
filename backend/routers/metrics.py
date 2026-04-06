@@ -159,6 +159,17 @@ def get_correlations(
             habits_by_date[d] = {}
         habits_by_date[d][h.habit_key] = h.value
 
+    # Add synthetic "had_workout" habit from Activity table
+    activity_rows = db.query(models.Activity).filter(
+        and_(models.Activity.user_id == current_user.id,
+             models.Activity.date >= since)
+    ).all()
+    for act in activity_rows:
+        d = str(act.date)
+        if d not in habits_by_date:
+            habits_by_date[d] = {}
+        habits_by_date[d]["had_workout"] = 1
+
     # Collect unique habit keys
     all_habit_keys: set = set()
     for day_habits in habits_by_date.values():

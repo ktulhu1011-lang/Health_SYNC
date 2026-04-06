@@ -13,7 +13,8 @@ INSIGHT_PROMPT = """Ты — персональный AI-аналитик здо
 ПРИВЫЧКИ (по дням):
 {habits_json}
 
-БИОМЕТРИКА Garmin (по дням, поля: sleep_score, hrv_avg — средний HRV за ночь мс, hrv_status, resting_hr, avg_stress, body_battery, deep_sleep_min, steps, vigorous_min — минуты интенсивных нагрузок, workouts — список тренировок с типом и длительностью):
+БИОМЕТРИКА Garmin (по дням):
+Поля: sleep_score, sleep_start/sleep_end — время сна, deep/rem/light/awake_min — фазы сна в минутах, hrv_avg мс, hrv_status, hrv_baseline (норма), resting_hr, avg_stress, body_battery_charged/drained, steps, vigorous_min, moderate_min, workouts
 {metrics_json}
 
 АГРЕГАТЫ (среднее "с привычкой" vs "без привычки"):
@@ -95,32 +96,54 @@ def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on
     metrics_by_date = {}
     for g in garmin:
         d = str(g.date)
-        metrics_by_date[d] = {
+        row = {
             "sleep_score": g.sleep_score,
+            "sleep_start": g.sleep_start.strftime("%H:%M") if g.sleep_start else None,
+            "sleep_end": g.sleep_end.strftime("%H:%M") if g.sleep_end else None,
+            "deep_min": round(g.deep_sleep_sec / 60) if g.deep_sleep_sec else None,
+            "rem_min": round(g.rem_sleep_sec / 60) if g.rem_sleep_sec else None,
+            "light_min": round(g.light_sleep_sec / 60) if g.light_sleep_sec else None,
+            "awake_min": round(g.awake_sec / 60) if g.awake_sec else None,
             "hrv_avg": g.hrv_last_night_avg,
             "hrv_status": g.hrv_status,
+            "hrv_baseline": f"{g.hrv_baseline_low}-{g.hrv_baseline_high}" if g.hrv_baseline_low else None,
             "resting_hr": g.resting_hr,
             "avg_stress": g.avg_stress,
-            "body_battery": g.body_battery_charged,
-            "deep_sleep_min": round(g.deep_sleep_sec / 60, 1) if g.deep_sleep_sec else None,
+            "body_battery_charged": g.body_battery_charged,
+            "body_battery_drained": g.body_battery_drained,
             "steps": g.steps,
             "vigorous_min": g.vigorous_intensity_minutes,
-            "workouts": activities_by_date.get(d, []),
+            "moderate_min": g.moderate_intensity_minutes,
+            "workouts": activities_by_date.get(d, []) or None,
         }
+        # Drop None values to save space
+        metrics_by_date[d] = {k: v for k, v in row.items() if v is not None}
 
     # Compute aggregates
     aggregates = _compute_aggregates(habits_by_date, metrics_by_date)
 
     import json
+    def _compact(obj):
+        return json.dumps(obj, ensure_ascii=False, default=str, separators=(',', ':'))
+
+    def _trim_days(data: dict, max_chars: int) -> str:
+        """Trim oldest days first to fit within char limit."""
+        days_sorted = sorted(data.keys())
+        result = data
+        while len(_compact(result)) > max_chars and len(days_sorted) > 14:
+            days_sorted = days_sorted[1:]
+            result = {k: data[k] for k in days_sorted}
+        return _compact(result)
+
     date_from = since.strftime("%d.%m.%Y")
     date_to = date.today().strftime("%d.%m.%Y")
     prompt = INSIGHT_PROMPT.format(
         days=days,
         date_from=date_from,
         date_to=date_to,
-        habits_json=json.dumps(habits_by_date, ensure_ascii=False, default=str)[:6000],
-        metrics_json=json.dumps(metrics_by_date, ensure_ascii=False, default=str)[:7000],
-        aggregates_json=json.dumps(aggregates, ensure_ascii=False, default=str)[:4000],
+        habits_json=_trim_days(habits_by_date, 18000),
+        metrics_json=_trim_days(metrics_by_date, 18000),
+        aggregates_json=_compact(aggregates)[:8000],
     )
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -194,28 +217,41 @@ def ask_question_for_user(user_id: int, question: str, db: Session, days: int = 
     metrics_by_date = {}
     for g in garmin:
         d = str(g.date)
-        metrics_by_date[d] = {
+        row = {
             "sleep_score": g.sleep_score,
+            "sleep_start": g.sleep_start.strftime("%H:%M") if g.sleep_start else None,
+            "sleep_end": g.sleep_end.strftime("%H:%M") if g.sleep_end else None,
+            "deep_min": round(g.deep_sleep_sec / 60) if g.deep_sleep_sec else None,
+            "rem_min": round(g.rem_sleep_sec / 60) if g.rem_sleep_sec else None,
+            "light_min": round(g.light_sleep_sec / 60) if g.light_sleep_sec else None,
+            "awake_min": round(g.awake_sec / 60) if g.awake_sec else None,
             "hrv_avg": g.hrv_last_night_avg,
+            "hrv_status": g.hrv_status,
             "resting_hr": g.resting_hr,
             "avg_stress": g.avg_stress,
-            "body_battery": g.body_battery_charged,
+            "body_battery_charged": g.body_battery_charged,
+            "body_battery_drained": g.body_battery_drained,
             "steps": g.steps,
-            "workouts": activities_by_date.get(d, []),
+            "vigorous_min": g.vigorous_intensity_minutes,
+            "workouts": activities_by_date.get(d, []) or None,
         }
+        metrics_by_date[d] = {k: v for k, v in row.items() if v is not None}
 
     aggregates = _compute_aggregates(habits_by_date, metrics_by_date)
     date_from = since.strftime("%d.%m.%Y")
     date_to = date.today().strftime("%d.%m.%Y")
+
+    def _compact(obj):
+        return json.dumps(obj, ensure_ascii=False, default=str, separators=(',', ':'))
 
     prompt = ASK_PROMPT.format(
         days=days,
         date_from=date_from,
         date_to=date_to,
         question=question,
-        habits_json=json.dumps(habits_by_date, ensure_ascii=False, default=str)[:5000],
-        metrics_json=json.dumps(metrics_by_date, ensure_ascii=False, default=str)[:6000],
-        aggregates_json=json.dumps(aggregates, ensure_ascii=False, default=str)[:3000],
+        habits_json=_compact(habits_by_date)[:15000],
+        metrics_json=_compact(metrics_by_date)[:15000],
+        aggregates_json=_compact(aggregates)[:6000],
     )
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)

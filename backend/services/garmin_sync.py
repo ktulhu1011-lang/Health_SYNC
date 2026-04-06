@@ -66,7 +66,7 @@ def _extract_display_name_from_jwt(client) -> str:
 
 
 def _save_tokens(user_id: int, client, db: "Session"):
-    """Persist garth tokens to user settings_json so they survive restarts."""
+    """Persist garth tokens + display_name to user settings_json so they survive restarts."""
     try:
         import tempfile, shutil, json, os as _os
         tmp = tempfile.mkdtemp()
@@ -81,6 +81,9 @@ def _save_tokens(user_id: int, client, db: "Session"):
             s = dict(user.settings_json or {})
             s["garmin_tokens"] = token_data
             s["garmin_token_ts"] = time.time()
+            # Persist display_name so we never need to call profile API again
+            if client.display_name:
+                s["garmin_display_name"] = client.display_name
             user.settings_json = s
             db.commit()
     except Exception as e:
@@ -122,22 +125,28 @@ def _get_garmin_client(user_id: int, email: str, password: str, db=None):
             client.garth.load(token_dir)
             shutil.rmtree(token_dir, ignore_errors=True)
 
-            # Extract display_name from JWT payload (no API call needed — avoids 429)
-            display_name = _extract_display_name_from_jwt(client)
-            if display_name:
-                client.display_name = display_name
-                print(f"[garmin] display_name from JWT: {display_name}")
+            # 1. Try cached display_name from DB (fastest, no API call)
+            user_obj = db.query(models.User).filter(models.User.id == user_id).first() if db else None
+            cached_dn = (user_obj.settings_json or {}).get("garmin_display_name") if user_obj else None
+            if cached_dn:
+                client.display_name = cached_dn
+                print(f"[garmin] display_name from DB cache: {cached_dn}")
             else:
-                # Fallback: try garth.profile API (may rate-limit)
-                try:
-                    profile = client.garth.profile
-                    client.display_name = profile.get("displayName") or profile.get("userName")
-                    print(f"[garmin] display_name from profile: {client.display_name}")
-                except Exception as pe:
-                    print(f"[garmin] profile fetch failed: {pe} — sync may return empty data")
+                # 2. Try JWT decode (no API call)
+                display_name = _extract_display_name_from_jwt(client)
+                if display_name:
+                    client.display_name = display_name
+                    print(f"[garmin] display_name from JWT: {display_name}")
+                else:
+                    # 3. Last resort: profile API (may rate-limit)
+                    try:
+                        profile = client.garth.profile
+                        client.display_name = profile.get("displayName") or profile.get("userName")
+                        print(f"[garmin] display_name from profile API: {client.display_name}")
+                    except Exception as pe:
+                        print(f"[garmin] profile fetch failed: {pe} — sync may return empty data")
 
             _garmin_client_cache[user_id] = (client, time.time())
-            # Re-save tokens after restore (garth may have refreshed access token)
             if db:
                 _save_tokens(user_id, client, db)
             print(f"[garmin] Restored session for user {user_id}, display_name={client.display_name}")
@@ -346,12 +355,8 @@ def sync_all_users(db: Session):
         models.User.garmin_email_enc.isnot(None)
     ).all()
     for user in users:
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                sync_user(user.id, db, days_back=2)
-                break
-            except Exception as e:
-                print(f"[garmin_sync] Attempt {attempt+1}/{max_retries} failed for user {user.id}: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(3600)  # Wait 1 hour before retry
+        try:
+            count = sync_user(user.id, db, days_back=3)
+            print(f"[garmin_sync] Synced user {user.id}: {count} metrics")
+        except Exception as e:
+            print(f"[garmin_sync] Failed for user {user.id}: {e}")

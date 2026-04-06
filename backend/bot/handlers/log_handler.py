@@ -193,6 +193,50 @@ async def cmd_insight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user, db = _get_user(update.effective_user.id)
+    if db: db.close()
+    if not user:
+        await update.message.reply_text("❌ Не зарегистрирован.")
+        return
+    context.user_data["waiting_ai_question"] = True
+    context.user_data["ai_question_days"] = 30
+    await update.message.reply_text(
+        "💬 Задай любой вопрос — AI ответит на основе твоих данных за 30 дней.\n\n"
+        "Например:\n"
+        "• Как кофе влияет на мой сон?\n"
+        "• В какие дни у меня лучший HRV?\n"
+        "• Помогают ли тренировки со стрессом?\n\n"
+        "Просто напиши вопрос:"
+    )
+
+
+async def handle_ai_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    question = update.message.text.strip()
+    days = context.user_data.get("ai_question_days", 30)
+    context.user_data.pop("waiting_ai_question", None)
+
+    user, db = _get_user(update.effective_user.id)
+    if not user:
+        await update.message.reply_text("❌ Не зарегистрирован.")
+        if db: db.close()
+        return
+
+    try:
+        await update.message.reply_text("🤔 Анализирую твои данные, подожди...")
+        from services.ai_insights import ask_question_for_user
+        answer = ask_question_for_user(user.id, question, db, days=days)
+        chunks = _split_text(f"💬 Вопрос: {question}\n\n{answer}", limit=4000)
+        for i, chunk in enumerate(chunks):
+            if i > 0:
+                chunk = f"...продолжение ({i+1}/{len(chunks)}):\n\n" + chunk
+            await update.message.reply_text(chunk)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+    finally:
+        db.close()
+
+
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user, db = _get_user(update.effective_user.id)
     if not user:

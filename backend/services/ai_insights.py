@@ -143,6 +143,90 @@ def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on
     return insight
 
 
+ASK_PROMPT = """Ты — персональный AI-аналитик здоровья. Отвечай на русском языке, конкретно и с цифрами.
+
+Данные пользователя за последние {days} дней ({date_from} — {date_to}):
+
+ПРИВЫЧКИ (по дням):
+{habits_json}
+
+БИОМЕТРИКА Garmin (sleep_score, hrv_avg мс, resting_hr, avg_stress, body_battery, steps, workouts):
+{metrics_json}
+
+АГРЕГАТЫ ("с привычкой" vs "без"):
+{aggregates_json}
+
+ВОПРОС ПОЛЬЗОВАТЕЛЯ: {question}
+
+Ответь на вопрос максимально точно, опираясь на реальные данные выше. Используй конкретные числа из данных. Если данных недостаточно для ответа — честно скажи об этом."""
+
+
+def ask_question_for_user(user_id: int, question: str, db: Session, days: int = 30) -> str:
+    """Answer a user's custom question based on their health data."""
+    since = date.today() - timedelta(days=days)
+    import json
+
+    habits = db.query(models.HabitLog).filter(
+        and_(models.HabitLog.user_id == user_id, models.HabitLog.date >= since)
+    ).order_by(models.HabitLog.date).all()
+
+    garmin = db.query(models.GarminDaily).filter(
+        and_(models.GarminDaily.user_id == user_id, models.GarminDaily.date >= since)
+    ).order_by(models.GarminDaily.date).all()
+
+    habits_by_date: dict = {}
+    for h in habits:
+        d = str(h.date)
+        if d not in habits_by_date:
+            habits_by_date[d] = {}
+        habits_by_date[d][h.habit_key] = h.value
+
+    activities = db.query(models.GarminActivity).filter(
+        and_(models.GarminActivity.user_id == user_id, models.GarminActivity.date >= since)
+    ).all()
+    activities_by_date: dict = {}
+    for a in activities:
+        d = str(a.date)
+        if d not in activities_by_date:
+            activities_by_date[d] = []
+        activities_by_date[d].append({"type": a.activity_type, "duration_min": round(a.duration_sec / 60) if a.duration_sec else None})
+
+    metrics_by_date = {}
+    for g in garmin:
+        d = str(g.date)
+        metrics_by_date[d] = {
+            "sleep_score": g.sleep_score,
+            "hrv_avg": g.hrv_last_night_avg,
+            "resting_hr": g.resting_hr,
+            "avg_stress": g.avg_stress,
+            "body_battery": g.body_battery_charged,
+            "steps": g.steps,
+            "workouts": activities_by_date.get(d, []),
+        }
+
+    aggregates = _compute_aggregates(habits_by_date, metrics_by_date)
+    date_from = since.strftime("%d.%m.%Y")
+    date_to = date.today().strftime("%d.%m.%Y")
+
+    prompt = ASK_PROMPT.format(
+        days=days,
+        date_from=date_from,
+        date_to=date_to,
+        question=question,
+        habits_json=json.dumps(habits_by_date, ensure_ascii=False, default=str)[:5000],
+        metrics_json=json.dumps(metrics_by_date, ensure_ascii=False, default=str)[:6000],
+        aggregates_json=json.dumps(aggregates, ensure_ascii=False, default=str)[:3000],
+    )
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    message = client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return message.content[0].text
+
+
 def _compute_aggregates(habits_by_date: dict, metrics_by_date: dict) -> dict:
     all_habit_keys: set = set()
     for day_habits in habits_by_date.values():

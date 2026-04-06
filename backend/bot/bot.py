@@ -6,7 +6,7 @@ from telegram import Update, BotCommand, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from config import settings
 from bot.handlers.log_handler import (
-    cmd_log, cmd_today, cmd_stats, cmd_insight, cmd_history, button_callback
+    cmd_log, cmd_today, cmd_stats, cmd_insight, cmd_ask, cmd_history, button_callback
 )
 from bot.handlers.settings_handler import (
     cmd_settings, settings_callback, handle_garmin_email, handle_garmin_password
@@ -15,7 +15,7 @@ from bot.handlers.settings_handler import (
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("📝 Лог"), KeyboardButton("📊 Сегодня")],
-        [KeyboardButton("📈 Статистика"), KeyboardButton("🤖 Инсайт")],
+        [KeyboardButton("🤖 Инсайт"), KeyboardButton("💬 Спросить AI")],
         [KeyboardButton("📋 История"), KeyboardButton("⚙️ Настройки")],
     ],
     resize_keyboard=True,
@@ -41,6 +41,7 @@ def main():
     app.add_handler(CommandHandler("today", cmd_today))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("insight", cmd_insight))
+    app.add_handler(CommandHandler("ask", cmd_ask))
     app.add_handler(CommandHandler("history", cmd_history))
     app.add_handler(CommandHandler("settings", cmd_settings))
 
@@ -48,7 +49,7 @@ def main():
     app.add_handler(CallbackQueryHandler(settings_callback, pattern=r"^(settings:|supp_set:)"))
     app.add_handler(CallbackQueryHandler(button_callback))
 
-    # Text messages (for Garmin credential input)
+    # Text messages
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         _handle_text
@@ -60,6 +61,7 @@ def main():
             BotCommand("today", "📊 Сводка за сегодня + Garmin"),
             BotCommand("stats", "📈 Статистика за 7 дней"),
             BotCommand("insight", "🤖 AI-инсайт прямо сейчас"),
+            BotCommand("ask", "💬 Задать вопрос AI по своим данным"),
             BotCommand("history", "📋 Последние 7 записей"),
             BotCommand("settings", "⚙️ Настройки"),
         ])
@@ -74,6 +76,7 @@ BUTTON_MAP = {
     "📊 Сегодня": cmd_today,
     "📈 Статистика": cmd_stats,
     "🤖 Инсайт": cmd_insight,
+    "💬 Спросить AI": cmd_ask,
     "📋 История": cmd_history,
     "⚙️ Настройки": cmd_settings,
 }
@@ -83,7 +86,10 @@ async def _handle_text(update: Update, context):
     if text in BUTTON_MAP:
         await BUTTON_MAP[text](update, context)
         return
-    if context.user_data.get("waiting_garmin_email"):
+    if context.user_data.get("waiting_ai_question"):
+        from bot.handlers.log_handler import handle_ai_question
+        await handle_ai_question(update, context)
+    elif context.user_data.get("waiting_garmin_email"):
         await handle_garmin_email(update, context)
     elif context.user_data.get("waiting_garmin_password"):
         await handle_garmin_password(update, context)

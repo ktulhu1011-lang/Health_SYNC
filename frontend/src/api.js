@@ -51,7 +51,8 @@ export const heart = {
 
 export const insights = {
   list: (limit = 20) => api.get('/insights/', { params: { limit } }),
-  generate: () => api.post('/insights/generate'),
+  generate: (days = 30) => api.post('/insights/generate', null, { params: { days } }),
+  ask: (question, days = 30) => api.post('/insights/ask', { question, days }),
   getSettings: () => api.get('/insights/settings'),
   updateSettings: (data) => api.put('/insights/settings', data),
 }

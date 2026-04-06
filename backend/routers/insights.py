@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+from pydantic import BaseModel
 from database import get_db
 import models, schemas, auth as auth_utils
+
+
+class AskRequest(BaseModel):
+    question: str
+    days: int = 30
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
@@ -31,6 +37,24 @@ def generate_insight(
     except Exception as e:
         import traceback
         print(f"[insights] ERROR: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ask")
+def ask_question(
+    body: AskRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_utils.get_current_user)
+):
+    from services.ai_insights import ask_question_for_user
+    if not body.question or not body.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+    try:
+        answer = ask_question_for_user(current_user.id, body.question.strip(), db, days=body.days)
+        return {"answer": answer, "question": body.question, "days": body.days}
+    except Exception as e:
+        import traceback
+        print(f"[insights/ask] ERROR: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -164,10 +164,16 @@ def get_correlations(
     for day_habits in habits_by_date.values():
         all_habit_keys.update(day_habits.keys())
 
-    metrics_fields = ["sleep_score", "hrv_peak", "resting_hr", "avg_stress", "body_battery_charged"]
+    metrics_fields = [
+        "sleep_score", "hrv_last_night_avg", "resting_hr",
+        "avg_stress", "body_battery_charged", "steps",
+    ]
     results = []
 
     for habit_key in all_habit_keys:
+        # Skip supplement keys — too granular for correlations
+        if habit_key.startswith("supp_"):
+            continue
         for metric in metrics_fields:
             vals_with = []
             vals_without = []
@@ -175,9 +181,12 @@ def get_correlations(
                 metric_val = getattr(garmin, metric, None)
                 if metric_val is None:
                     continue
+                try:
+                    metric_val = float(metric_val)
+                except (TypeError, ValueError):
+                    continue
                 has_habit = d in habits_by_date and habit_key in habits_by_date[d]
                 if has_habit:
-                    # Only count "active" habits (not "no" answers)
                     val = habits_by_date[d][habit_key]
                     if _is_habit_active(val):
                         vals_with.append(metric_val)
@@ -186,7 +195,7 @@ def get_correlations(
                 else:
                     vals_without.append(metric_val)
 
-            if len(vals_with) >= 3 and len(vals_without) >= 3:
+            if len(vals_with) >= 2 and len(vals_without) >= 2:
                 avg_with = sum(vals_with) / len(vals_with)
                 avg_without = sum(vals_without) / len(vals_without)
                 delta = avg_with - avg_without
@@ -200,18 +209,26 @@ def get_correlations(
                     "days_without": len(vals_without),
                 })
 
+    # Sort by absolute delta descending
+    results.sort(key=lambda x: abs(x["delta"]), reverse=True)
     return results
 
 
 def _is_habit_active(value) -> bool:
     """Check if a habit value represents an 'active' state (not 'no/none/0')."""
+    if value is None:
+        return False
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
         return value > 0
     if isinstance(value, str):
-        no_values = {"нет", "не курил", "не пил", "не ел", "0", "no", "false", "нет ✅", "не курил ✅", "не пил ✅"}
+        no_values = {"нет", "не курил", "не пил", "не ел", "0", "no", "false",
+                     "нет ✅", "не курил ✅", "не пил ✅", "ask_count"}
         return value.lower() not in no_values
     if isinstance(value, dict):
-        return value.get("count", 0) > 0
+        try:
+            return int(value.get("count", 0)) > 0
+        except (TypeError, ValueError):
+            return False
     return False

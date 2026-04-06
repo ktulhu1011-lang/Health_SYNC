@@ -68,6 +68,12 @@ export default function Sleep() {
         backgroundColor: 'rgba(148,163,184,0.5)',
         borderRadius: 3,
       },
+      {
+        label: 'Бодрствование',
+        data: data.map(r => r.awake_sec ? Math.round(r.awake_sec / 60) : null),
+        backgroundColor: 'rgba(251,146,60,0.8)',
+        borderRadius: 3,
+      },
     ]
   }
 
@@ -113,13 +119,14 @@ export default function Sleep() {
 
       {/* Latest night summary */}
       {latest && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <div className="col-span-1 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 flex items-center justify-center">
             <SleepScore score={latest.sleep_score} />
           </div>
           {[
             { icon: '🔵', label: 'Глубокий', val: latest.deep_sleep_sec ? `${Math.round(latest.deep_sleep_sec / 60)} мин` : '—' },
             { icon: '🟣', label: 'REM', val: latest.rem_sleep_sec ? `${Math.round(latest.rem_sleep_sec / 60)} мин` : '—' },
+            { icon: '🟠', label: 'Бодрствование', val: latest.awake_sec ? `${Math.round(latest.awake_sec / 60)} мин` : '—' },
             { icon: '❤️', label: 'HRV средний', val: latest.hrv_last_night_avg ? `${latest.hrv_last_night_avg} мс` : '—' },
             { icon: '💗', label: 'Пульс покоя', val: latest.resting_hr ? `${latest.resting_hr} BPM` : '—' },
           ].map(item => (
@@ -215,7 +222,7 @@ export default function Sleep() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800">
-              {['Дата', 'Score', 'Глубокий', 'REM', 'Лёгкий', 'HRV avg', 'HRV статус', 'Пульс покоя'].map(h => (
+              {['Дата', 'Score', 'Глубокий', 'REM', 'Лёгкий', 'Бодрствование', 'HRV avg', 'HRV статус', 'Пульс покоя'].map(h => (
                 <th key={h} className="text-left p-3 text-gray-400 font-medium">{h}</th>
               ))}
             </tr>
@@ -232,6 +239,7 @@ export default function Sleep() {
                 <td className="p-3 text-gray-300">{r.deep_sleep_sec ? `${Math.round(r.deep_sleep_sec / 60)} мин` : '—'}</td>
                 <td className="p-3 text-gray-300">{r.rem_sleep_sec ? `${Math.round(r.rem_sleep_sec / 60)} мин` : '—'}</td>
                 <td className="p-3 text-gray-300">{r.light_sleep_sec ? `${Math.round(r.light_sleep_sec / 60)} мин` : '—'}</td>
+                <td className="p-3 text-orange-300">{r.awake_sec ? `${Math.round(r.awake_sec / 60)} мин` : '—'}</td>
                 <td className="p-3 text-gray-300">{r.hrv_last_night_avg ? `${r.hrv_last_night_avg} мс` : '—'}</td>
                 <td className="p-3">
                   {r.hrv_status ? (

@@ -57,4 +57,29 @@ export const insights = {
   updateSettings: (data) => api.put('/insights/settings', data),
 }
 
+export const exportData = {
+  csvUrl: (days = 3650) => {
+    const token = localStorage.getItem('token')
+    const base = import.meta.env.VITE_API_URL || '/api'
+    return `${base}/export/csv?days=${days}&token=${token}`
+  },
+  downloadCsv: async (days = 3650) => {
+    const token = localStorage.getItem('token')
+    const base = import.meta.env.VITE_API_URL || '/api'
+    const resp = await fetch(`${base}/export/csv?days=${days}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const blob = await resp.blob()
+    const cd = resp.headers.get('content-disposition') || ''
+    const match = cd.match(/filename=(.+)/)
+    const filename = match ? match[1] : 'healthsync.csv'
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+}
+
 export default api

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from database import engine, SessionLocal
 import models
 from config import settings
-from routers import auth, habits, metrics, heart_rate, insights
+from routers import auth, habits, metrics, heart_rate, insights, export
 
 
 @asynccontextmanager
@@ -36,6 +36,7 @@ app.include_router(habits.router)
 app.include_router(metrics.router)
 app.include_router(heart_rate.router)
 app.include_router(insights.router)
+app.include_router(export.router)
 
 
 @app.get("/health")

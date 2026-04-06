@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react'
-import { insights, metrics } from '../api'
+import { insights, metrics, exportData } from '../api'
 import { AuthContext } from '../App'
 
 const SUPPLEMENT_GROUPS = {
@@ -43,6 +43,8 @@ export default function Settings() {
   const [garminPassword, setGarminPassword] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportDays, setExportDays] = useState(365)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -223,6 +225,45 @@ export default function Settings() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Export */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
+        <h2 className="font-semibold text-gray-200 mb-1">📥 Экспорт данных</h2>
+        <p className="text-gray-500 text-xs mb-4">Скачать все данные (Garmin + привычки) одной таблицей CSV</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-1">
+            {[90, 180, 365, 730].map(d => (
+              <button
+                key={d}
+                onClick={() => setExportDays(d)}
+                className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                  exportDays === d
+                    ? 'border-blue-500 bg-blue-500/20 text-blue-400'
+                    : 'border-gray-700 text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                {d >= 365 ? `${d / 365} год${d > 365 ? 'а' : ''}` : `${d} дн`}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={async () => {
+              setExporting(true)
+              try {
+                await exportData.downloadCsv(exportDays)
+              } catch {
+                setError('Ошибка экспорта')
+              } finally {
+                setExporting(false)
+              }
+            }}
+            disabled={exporting}
+            className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {exporting ? '⏳ Скачиваю...' : '⬇️ Скачать CSV'}
+          </button>
         </div>
       </div>
 

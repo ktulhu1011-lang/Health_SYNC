@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import anthropic
 import models
+import csv
+import io
 from config import settings
 
 
@@ -10,15 +12,14 @@ INSIGHT_PROMPT = """Ты — персональный AI-аналитик здо
 
 Данные пользователя за последние {days} дней ({date_from} — {date_to}):
 
-ПРИВЫЧКИ (по дням):
-{habits_json}
+БИОМЕТРИКА Garmin (CSV: date,sleep_score,sleep_start,sleep_end,deep_min,rem_min,light_min,awake_min,hrv_avg,hrv_status,hrv_baseline,resting_hr,avg_stress,body_battery_charged,body_battery_drained,steps,vigorous_min,moderate_min,workouts):
+{metrics_csv}
 
-БИОМЕТРИКА Garmin (по дням):
-Поля: sleep_score, sleep_start/sleep_end — время сна, deep/rem/light/awake_min — фазы сна в минутах, hrv_avg мс, hrv_status, hrv_baseline (норма), resting_hr, avg_stress, body_battery_charged/drained, steps, vigorous_min, moderate_min, workouts
-{metrics_json}
+ПРИВЫЧКИ (CSV: date,habit_key,value):
+{habits_csv}
 
-АГРЕГАТЫ (среднее "с привычкой" vs "без привычки"):
-{aggregates_json}
+АГРЕГАТЫ по привычкам (habit_key,metric,avg_with,avg_without,delta,n_with,n_without):
+{aggregates_csv}
 
 Проведи полный анализ по следующим блокам:
 
@@ -122,28 +123,15 @@ def generate_insight_for_user(user_id: int, db: Session, trigger_type: str = "on
     # Compute aggregates
     aggregates = _compute_aggregates(habits_by_date, metrics_by_date)
 
-    import json
-    def _compact(obj):
-        return json.dumps(obj, ensure_ascii=False, default=str, separators=(',', ':'))
-
-    def _trim_days(data: dict, max_chars: int) -> str:
-        """Trim oldest days first to fit within char limit."""
-        days_sorted = sorted(data.keys())
-        result = data
-        while len(_compact(result)) > max_chars and len(days_sorted) > 14:
-            days_sorted = days_sorted[1:]
-            result = {k: data[k] for k in days_sorted}
-        return _compact(result)
-
     date_from = since.strftime("%d.%m.%Y")
     date_to = date.today().strftime("%d.%m.%Y")
     prompt = INSIGHT_PROMPT.format(
         days=days,
         date_from=date_from,
         date_to=date_to,
-        habits_json=_trim_days(habits_by_date, 18000),
-        metrics_json=_trim_days(metrics_by_date, 18000),
-        aggregates_json=_compact(aggregates)[:8000],
+        metrics_csv=_build_metrics_csv(metrics_by_date),
+        habits_csv=_build_habits_csv(habits_by_date),
+        aggregates_csv=_build_aggregates_csv(aggregates),
     )
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -170,14 +158,14 @@ ASK_PROMPT = """Ты — персональный AI-аналитик здоро
 
 Данные пользователя за последние {days} дней ({date_from} — {date_to}):
 
-ПРИВЫЧКИ (по дням):
-{habits_json}
+БИОМЕТРИКА Garmin (CSV: date,sleep_score,sleep_start,sleep_end,deep_min,rem_min,light_min,awake_min,hrv_avg,hrv_status,resting_hr,avg_stress,body_battery_charged,body_battery_drained,steps,vigorous_min,workouts):
+{metrics_csv}
 
-БИОМЕТРИКА Garmin (sleep_score, hrv_avg мс, resting_hr, avg_stress, body_battery, steps, workouts):
-{metrics_json}
+ПРИВЫЧКИ (CSV: date,habit_key,value):
+{habits_csv}
 
-АГРЕГАТЫ ("с привычкой" vs "без"):
-{aggregates_json}
+АГРЕГАТЫ (habit_key,metric,avg_with,avg_without,delta,n_with,n_without):
+{aggregates_csv}
 
 ВОПРОС ПОЛЬЗОВАТЕЛЯ: {question}
 
@@ -187,7 +175,6 @@ ASK_PROMPT = """Ты — персональный AI-аналитик здоро
 def ask_question_for_user(user_id: int, question: str, db: Session, days: int = 30) -> str:
     """Answer a user's custom question based on their health data."""
     since = date.today() - timedelta(days=days)
-    import json
 
     habits = db.query(models.HabitLog).filter(
         and_(models.HabitLog.user_id == user_id, models.HabitLog.date >= since)
@@ -241,17 +228,14 @@ def ask_question_for_user(user_id: int, question: str, db: Session, days: int = 
     date_from = since.strftime("%d.%m.%Y")
     date_to = date.today().strftime("%d.%m.%Y")
 
-    def _compact(obj):
-        return json.dumps(obj, ensure_ascii=False, default=str, separators=(',', ':'))
-
     prompt = ASK_PROMPT.format(
         days=days,
         date_from=date_from,
         date_to=date_to,
         question=question,
-        habits_json=_compact(habits_by_date)[:15000],
-        metrics_json=_compact(metrics_by_date)[:15000],
-        aggregates_json=_compact(aggregates)[:6000],
+        metrics_csv=_build_metrics_csv(metrics_by_date),
+        habits_csv=_build_habits_csv(habits_by_date),
+        aggregates_csv=_build_aggregates_csv(aggregates),
     )
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -261,6 +245,81 @@ def ask_question_for_user(user_id: int, question: str, db: Session, days: int = 
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text
+
+
+def _build_metrics_csv(metrics_by_date: dict, max_chars: int = 20000) -> str:
+    fields = [
+        "sleep_score", "sleep_start", "sleep_end",
+        "deep_min", "rem_min", "light_min", "awake_min",
+        "hrv_avg", "hrv_status", "hrv_baseline",
+        "resting_hr", "avg_stress",
+        "body_battery_charged", "body_battery_drained",
+        "steps", "vigorous_min", "moderate_min", "workouts",
+    ]
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["date"] + fields)
+    for d in sorted(metrics_by_date.keys()):
+        row = metrics_by_date[d]
+        workouts = row.get("workouts")
+        workout_str = ""
+        if workouts:
+            workout_str = "|".join(
+                f"{wk.get('type','?')}({wk.get('duration_min','?')}min)" for wk in workouts
+            )
+        vals = [row.get(f, "") for f in fields[:-1]] + [workout_str]
+        w.writerow([d] + vals)
+    result = out.getvalue()
+    if len(result) > max_chars:
+        lines = result.splitlines()
+        header = lines[0]
+        data_lines = lines[1:]
+        # Drop oldest days
+        while len("\n".join([header] + data_lines)) > max_chars and len(data_lines) > 14:
+            data_lines = data_lines[1:]
+        result = "\n".join([header] + data_lines)
+    return result
+
+
+def _build_habits_csv(habits_by_date: dict, max_chars: int = 15000) -> str:
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["date", "habit_key", "value"])
+    for d in sorted(habits_by_date.keys()):
+        for key, val in habits_by_date[d].items():
+            if isinstance(val, dict):
+                val = val.get("count", val)
+            w.writerow([d, key, val])
+    result = out.getvalue()
+    if len(result) > max_chars:
+        lines = result.splitlines()
+        header = lines[0]
+        data_lines = lines[1:]
+        while len("\n".join([header] + data_lines)) > max_chars and len(data_lines) > 20:
+            # Find first date and drop all its rows
+            first_date = data_lines[0].split(",")[0]
+            data_lines = [l for l in data_lines if not l.startswith(first_date + ",")]
+        result = "\n".join([header] + data_lines)
+    return result
+
+
+def _build_aggregates_csv(aggregates: dict, max_chars: int = 8000) -> str:
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["habit_key", "metric", "avg_with", "avg_without", "delta", "n_with", "n_without"])
+    rows = []
+    for habit_key, metrics in aggregates.items():
+        for metric, vals in metrics.items():
+            rows.append([
+                habit_key, metric,
+                vals["avg_with"], vals["avg_without"], vals["delta"],
+                vals["n_with"], vals["n_without"],
+            ])
+    # Sort by abs delta desc
+    rows.sort(key=lambda r: abs(r[4]), reverse=True)
+    for row in rows:
+        w.writerow(row)
+    return out.getvalue()[:max_chars]
 
 
 def _compute_aggregates(habits_by_date: dict, metrics_by_date: dict) -> dict:

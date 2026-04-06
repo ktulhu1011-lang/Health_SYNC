@@ -160,9 +160,9 @@ def get_correlations(
         habits_by_date[d][h.habit_key] = h.value
 
     # Add synthetic "had_workout" habit from Activity table
-    activity_rows = db.query(models.Activity).filter(
-        and_(models.Activity.user_id == current_user.id,
-             models.Activity.date >= since)
+    activity_rows = db.query(models.GarminActivity).filter(
+        and_(models.GarminActivity.user_id == current_user.id,
+             models.GarminActivity.date >= since)
     ).all()
     for act in activity_rows:
         d = str(act.date)

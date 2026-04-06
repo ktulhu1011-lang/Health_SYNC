@@ -67,6 +67,15 @@ export default function Settings() {
     })
   }, [])
 
+  async function toggleEvening(key, value) {
+    const update = { [key]: value }
+    try {
+      await insights.updateSettings(update)
+    } catch {
+      setError('Ошибка сохранения')
+    }
+  }
+
   function toggleSupplement(key) {
     setActiveSupplements(prev => {
       const next = new Set(prev)
@@ -219,7 +228,11 @@ export default function Settings() {
               <div className="text-xs text-gray-500 mt-0.5">22:30 МСК — убери экран, возьми книгу</div>
             </div>
             <div
-              onClick={() => setBedtimeEnabled(v => !v)}
+              onClick={() => {
+                const next = !bedtimeEnabled
+                setBedtimeEnabled(next)
+                toggleEvening('bedtime_reminder_enabled', next)
+              }}
               className={`w-10 h-6 rounded-full transition-colors cursor-pointer flex-shrink-0 relative ${
                 bedtimeEnabled ? 'bg-blue-600' : 'bg-gray-700'
               }`}
@@ -235,7 +248,11 @@ export default function Settings() {
               <div className="text-xs text-gray-500 mt-0.5">23:00 МСК — телефон убрал, свет выключил</div>
             </div>
             <div
-              onClick={() => setSleepEnabled(v => !v)}
+              onClick={() => {
+                const next = !sleepEnabled
+                setSleepEnabled(next)
+                toggleEvening('sleep_reminder_enabled', next)
+              }}
               className={`w-10 h-6 rounded-full transition-colors cursor-pointer flex-shrink-0 relative ${
                 sleepEnabled ? 'bg-blue-600' : 'bg-gray-700'
               }`}

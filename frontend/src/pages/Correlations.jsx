@@ -10,7 +10,7 @@ ChartJS.register(LinearScale, PointElement, Tooltip, Legend)
 
 const METRIC_LABELS = {
   sleep_score: '💤 Sleep score',
-  hrv_peak: '❤️ HRV',
+  hrv_last_night_avg: '❤️ HRV',
   resting_hr: '💗 Пульс покоя',
   avg_stress: '😤 Стресс',
   body_battery_charged: '🔋 Body Battery',

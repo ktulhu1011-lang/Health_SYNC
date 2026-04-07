@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from typing import List, Optional
@@ -120,16 +120,28 @@ def debug_garmin(
 
 @router.post("/garmin/sync")
 def manual_sync(
+    background_tasks: BackgroundTasks,
     days_back: int = Query(14, ge=1, le=90),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth_utils.get_current_user)
 ):
+    """Launch Garmin sync in background and return immediately."""
     from services.garmin_sync import sync_user
-    try:
-        count = sync_user(current_user.id, db, days_back=days_back)
-        return {"status": "ok", "metrics_fetched": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    from database import SessionLocal
+
+    user_id = current_user.id
+
+    def _run():
+        bg_db = SessionLocal()
+        try:
+            sync_user(user_id, bg_db, days_back=days_back)
+        except Exception as e:
+            print(f"[manual_sync] error for user {user_id}: {e}")
+        finally:
+            bg_db.close()
+
+    background_tasks.add_task(_run)
+    return {"status": "started", "days_back": days_back, "message": f"Синхронизация {days_back} дней запущена в фоне"}
 
 
 @router.get("/garmin/sync-logs")

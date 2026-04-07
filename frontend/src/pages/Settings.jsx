@@ -111,15 +111,35 @@ export default function Settings() {
     setMessage('')
     setError('')
     try {
-      const r = await metrics.syncNow(14)
-      setMessage(`✅ Синхронизировано! Получено ${r.data.metrics_fetched} метрик за 14 дней`)
-      const logs = await metrics.syncLogs()
-      setSyncLogs(logs.data)
+      await metrics.syncNow(14)
+      setMessage('🔄 Синхронизация запущена (14 дней). Обновляю статус...')
+      // Poll sync logs every 5s for 2 minutes to show progress
+      let attempts = 0
+      const poll = setInterval(async () => {
+        attempts++
+        try {
+          const logs = await metrics.syncLogs()
+          setSyncLogs(logs.data)
+          const latest = logs.data[0]
+          if (latest && new Date(latest.sync_at) > new Date(Date.now() - 5 * 60 * 1000)) {
+            if (latest.status === 'ok') {
+              setMessage(`✅ Готово! Загружено ${latest.metrics_fetched} метрик за 14 дней`)
+              clearInterval(poll)
+              setSyncing(false)
+            } else if (latest.status === 'error') {
+              setError(`❌ Ошибка: ${latest.error}`)
+              clearInterval(poll)
+              setSyncing(false)
+            }
+          }
+        } catch {}
+        if (attempts >= 24) { // 2 min timeout
+          clearInterval(poll)
+          setSyncing(false)
+        }
+      }, 5000)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Ошибка синхронизации')
-      const logs = await metrics.syncLogs().catch(() => ({ data: [] }))
-      setSyncLogs(logs.data)
-    } finally {
+      setError(e.response?.data?.detail || 'Ошибка запуска синхронизации')
       setSyncing(false)
     }
   }

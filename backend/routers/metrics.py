@@ -120,7 +120,7 @@ def debug_garmin(
 
 @router.post("/garmin/sync")
 def manual_sync(
-    days_back: int = Query(1, ge=1, le=90),
+    days_back: int = Query(14, ge=1, le=90),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth_utils.get_current_user)
 ):
@@ -130,6 +130,27 @@ def manual_sync(
         return {"status": "ok", "metrics_fetched": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/garmin/sync-logs")
+def get_sync_logs(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_utils.get_current_user)
+):
+    """Return recent sync log entries for the current user."""
+    logs = db.query(models.SyncLog).filter(
+        models.SyncLog.user_id == current_user.id
+    ).order_by(models.SyncLog.sync_at.desc()).limit(limit).all()
+    return [
+        {
+            "sync_at": l.sync_at.isoformat(),
+            "status": l.status,
+            "metrics_fetched": l.metrics_fetched,
+            "error": l.error_message,
+        }
+        for l in logs
+    ]
 
 
 @router.get("/correlations")

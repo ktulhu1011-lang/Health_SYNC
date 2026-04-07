@@ -37,7 +37,8 @@ export const metrics = {
   daily: (days = 30) => api.get('/metrics/daily', { params: { days } }),
   dailyByDate: (date) => api.get(`/metrics/daily/${date}`),
   correlations: (days = 30) => api.get('/metrics/correlations', { params: { days } }),
-  syncNow: () => api.post('/metrics/garmin/sync'),
+  syncNow: (days_back = 14) => api.post('/metrics/garmin/sync', null, { params: { days_back } }),
+  syncLogs: () => api.get('/metrics/garmin/sync-logs'),
   saveGarminCredentials: (email, password) =>
     api.post('/metrics/garmin/credentials', { email, password }),
 }

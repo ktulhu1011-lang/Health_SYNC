@@ -44,6 +44,7 @@ export default function Settings() {
   const [bedtimeEnabled, setBedtimeEnabled] = useState(false)
   const [sleepEnabled, setSleepEnabled] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncLogs, setSyncLogs] = useState([])
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportDays, setExportDays] = useState(365)
@@ -110,14 +111,22 @@ export default function Settings() {
     setMessage('')
     setError('')
     try {
-      const r = await metrics.syncNow()
-      setMessage(`✅ Синхронизировано! Получено ${r.data.metrics_fetched} метрик`)
+      const r = await metrics.syncNow(14)
+      setMessage(`✅ Синхронизировано! Получено ${r.data.metrics_fetched} метрик за 14 дней`)
+      const logs = await metrics.syncLogs()
+      setSyncLogs(logs.data)
     } catch (e) {
       setError(e.response?.data?.detail || 'Ошибка синхронизации')
+      const logs = await metrics.syncLogs().catch(() => ({ data: [] }))
+      setSyncLogs(logs.data)
     } finally {
       setSyncing(false)
     }
   }
+
+  useEffect(() => {
+    metrics.syncLogs().then(r => setSyncLogs(r.data)).catch(() => {})
+  }, [])
 
   async function saveGarmin() {
     if (!garminEmail || !garminPassword) return
@@ -182,9 +191,28 @@ export default function Settings() {
               disabled={syncing}
               className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
-              {syncing ? '⏳ Синхронизирую...' : '🔄 Синхронизировать сейчас'}
+              {syncing ? '⏳ Синхронизирую 14 дней...' : '🔄 Синхронизировать (14 дней)'}
             </button>
           </div>
+
+          {/* Sync logs */}
+          {syncLogs.length > 0 && (
+            <div className="mt-3">
+              <div className="text-xs text-gray-500 mb-1">Последние синхронизации:</div>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {syncLogs.map((l, i) => (
+                  <div key={i} className={`text-xs flex items-start gap-2 p-1.5 rounded ${l.status === 'ok' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    <span className="flex-shrink-0">{l.status === 'ok' ? '✅' : '❌'}</span>
+                    <span className="flex-shrink-0 text-gray-500">{new Date(l.sync_at).toLocaleString('ru')}</span>
+                    {l.status === 'ok'
+                      ? <span>{l.metrics_fetched} метрик</span>
+                      : <span className="truncate">{l.error}</span>
+                    }
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

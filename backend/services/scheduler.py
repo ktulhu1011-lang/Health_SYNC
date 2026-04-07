@@ -154,26 +154,26 @@ def _send_morning_summary(user, db):
 def create_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler()
 
-    # Garmin sync at configured hour (default 03:00)
+    # Garmin sync at configured hour — Moscow time
     scheduler.add_job(
         _garmin_sync_job,
-        CronTrigger(hour=settings.garmin_sync_hour, minute=0),
+        CronTrigger(hour=settings.garmin_sync_hour, minute=0, timezone="Europe/Moscow"),
         id="garmin_sync",
         replace_existing=True,
     )
 
-    # Weekly AI insights on Sunday at 09:00
+    # Weekly AI insights on Sunday at 09:00 Moscow time
     scheduler.add_job(
         _weekly_insight_job,
-        CronTrigger(day_of_week="sun", hour=9, minute=0),
+        CronTrigger(day_of_week="sun", hour=9, minute=0, timezone="Europe/Moscow"),
         id="weekly_insight",
         replace_existing=True,
     )
 
-    # Anomaly check daily at 10:00
+    # Anomaly check daily at 10:00 Moscow time
     scheduler.add_job(
         _anomaly_check_job,
-        CronTrigger(hour=10, minute=0),
+        CronTrigger(hour=10, minute=0, timezone="Europe/Moscow"),
         id="anomaly_check",
         replace_existing=True,
     )
@@ -187,18 +187,18 @@ def create_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
-    # 22:30 MSK = 19:30 UTC — лечь в кровать и читать
+    # 22:30 MSK — лечь в кровать и читать
     scheduler.add_job(
         _bedtime_reminder_job,
-        CronTrigger(hour=19, minute=30, timezone="UTC"),
+        CronTrigger(hour=22, minute=30, timezone="Europe/Moscow"),
         id="bedtime_reminder",
         replace_existing=True,
     )
 
-    # 23:00 MSK = 20:00 UTC — убрать вещи и спать
+    # 23:00 MSK — убрать вещи и спать
     scheduler.add_job(
         _sleep_reminder_job,
-        CronTrigger(hour=20, minute=0, timezone="UTC"),
+        CronTrigger(hour=23, minute=0, timezone="Europe/Moscow"),
         id="sleep_reminder",
         replace_existing=True,
     )

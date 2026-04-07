@@ -8,6 +8,27 @@ from sqlalchemy.orm import Session
 import models
 from config import settings
 
+# Delay between individual Garmin API calls to avoid 429
+_API_CALL_DELAY = 1.2  # seconds
+
+
+def _garmin_call(fn, *args, retries=3, **kwargs):
+    """Call a Garmin API function with retry on 429 / transient errors."""
+    for attempt in range(retries):
+        try:
+            result = fn(*args, **kwargs)
+            time.sleep(_API_CALL_DELAY)
+            return result
+        except Exception as e:
+            err_str = str(e).lower()
+            is_rate_limit = "429" in err_str or "rate" in err_str or "too many" in err_str
+            if is_rate_limit and attempt < retries - 1:
+                wait = 60 * (attempt + 1)  # 60s, 120s
+                print(f"[garmin] 429 rate limit, sleeping {wait}s (attempt {attempt+1})")
+                time.sleep(wait)
+                continue
+            raise
+
 
 def _get_key() -> bytes:
     key_b64 = settings.garmin_encryption_key
@@ -204,14 +225,14 @@ def _sync_day(client, user_id: int, target: date, db: Session) -> int:
     sleep_data = {}
 
     try:
-        stats = client.get_stats(date_str)
+        stats = _garmin_call(client.get_stats, date_str)
         daily_data.update(stats)
         count += 1
     except Exception as e:
         print(f"[garmin_sync] stats error {date_str}: {e}")
 
     try:
-        sleep = client.get_sleep_data(date_str)
+        sleep = _garmin_call(client.get_sleep_data, date_str)
         sleep_data = sleep.get("dailySleepDTO", {})
         count += 1
     except Exception as e:
@@ -244,7 +265,7 @@ def _sync_day(client, user_id: int, target: date, db: Session) -> int:
 
     # --- HRV from dedicated endpoint ---
     try:
-        hrv_data = client.get_hrv_data(date_str)
+        hrv_data = _garmin_call(client.get_hrv_data, date_str)
         hrv_summary = hrv_data.get("hrvSummary", {}) if isinstance(hrv_data, dict) else {}
         if hrv_summary:
             existing.hrv_last_night_avg = hrv_summary.get("lastNightAvg")
@@ -273,7 +294,7 @@ def _sync_day(client, user_id: int, target: date, db: Session) -> int:
 
     # --- Intraday HR ---
     try:
-        hr_data = client.get_heart_rates(date_str)
+        hr_data = _garmin_call(client.get_heart_rates, date_str)
         hr_values = hr_data.get("heartRateValues", [])
         if hr_values:
             # Delete existing intraday for this day
@@ -306,7 +327,7 @@ def _sync_day(client, user_id: int, target: date, db: Session) -> int:
 
     # --- Activities ---
     try:
-        activities = client.get_activities_by_date(date_str, date_str)
+        activities = _garmin_call(client.get_activities_by_date, date_str, date_str)
         for act in activities:
             garmin_id = act.get("activityId")
             if not garmin_id:
@@ -350,13 +371,15 @@ def _log_sync(db: Session, user_id: int, status: str, error_message: str = None,
 
 
 def sync_all_users(db: Session):
-    """Called by scheduler at 03:00."""
+    """Called by scheduler at 10:00."""
     users = db.query(models.User).filter(
         models.User.garmin_email_enc.isnot(None)
     ).all()
     for user in users:
         try:
-            count = sync_user(user.id, db, days_back=3)
+            count = sync_user(user.id, db, days_back=7)
             print(f"[garmin_sync] Synced user {user.id}: {count} metrics")
         except Exception as e:
             print(f"[garmin_sync] Failed for user {user.id}: {e}")
+        # Pause between users to reduce chance of rate limiting
+        time.sleep(5)
